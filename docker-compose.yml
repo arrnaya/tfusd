@@ -89,15 +89,10 @@ services:
     env_file:
       - .env
     environment:
-      - RPC_URL=http://hardhat:8545
       - AGENT_MODE=continuous
     volumes:
       - auditor-data:/app/data
       - auditor-logs:/app/logs
-      - hardhat-deployments:/app/deployments:ro
-    depends_on:
-      hardhat:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "require('fs').accessSync('/app/data/last-ping.json')"]
       interval: 60s
@@ -123,6 +118,8 @@ services:
       - tfusd-network
     env_file:
       - .env
+    environment:
+      - RESERVE_MINTER_DRY_RUN=${RESERVE_MINTER_DRY_RUN:-true}
     volumes:
       - reserve-minter-data:/app/data
       - reserve-minter-logs:/app/logs
