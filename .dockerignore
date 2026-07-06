@@ -48,6 +48,7 @@ pnpm-debug.log*
 Dockerfile*
 docker-compose*.yml
 docker/*.conf
+!docker/nginx.conf
 .dockerignore
 
 # Test outputs
