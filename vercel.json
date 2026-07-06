@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "name": "tfusd",
   "framework": null,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
