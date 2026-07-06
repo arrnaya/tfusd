@@ -34,15 +34,9 @@ RUN npm install --save-dev hardhat@2.22.0 @nomicfoundation/hardhat-toolbox \
 # Copy Hardhat config
 COPY hardhat.config.js ./
 
-# Copy contracts into the expected sources directory
-COPY TFUSD.sol ./contracts/
-COPY TFUSDDAO.sol ./contracts/
-
-# Copy deployment scripts
-COPY scripts/deploy.js ./scripts/
-
-# Copy environment template (will be overridden by docker-compose env_file)
-COPY .env.example ./
+# Copy contracts and deployment scripts
+COPY contracts/ ./contracts/
+COPY scripts/ ./scripts/
 
 # Expose the Hardhat JSON-RPC port
 EXPOSE 8545
