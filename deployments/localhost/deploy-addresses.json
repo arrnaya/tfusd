@@ -1,0 +1,30 @@
+{
+  "network": "localhost",
+  "chainId": "31337",
+  "deployedAt": "2026-07-06T08:09:55.984Z",
+  "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "create3Factory": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  "salts": {
+    "TrueFinUSD": "0xbe8640e40297e590584fe82d64fabd8bcf360af792a3bfee1c4faee65112b95e",
+    "TrueFinUSDDAO": "0xc71defa076f2b0f10cadbedce12d6181ad1b79c38b172db7debd8f6a52ee795d"
+  },
+  "contracts": {
+    "TrueFinUSD": {
+      "address": "0x7f17cf1E8997ea470a67142eEBCA6DED46674924",
+      "name": "TrueFin USD",
+      "symbol": "TFUSD",
+      "currency": "USD"
+    },
+    "TrueFinUSDDAO": {
+      "address": "0xd85B70f728E0de9F4b93fC775e35316501c1C796",
+      "owner": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+    }
+  },
+  "roles": {
+    "owner": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "masterMinter": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "pauser": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "blacklister": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "rescuer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+  }
+}

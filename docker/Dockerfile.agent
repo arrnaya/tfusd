@@ -1,0 +1,50 @@
+# =============================================================================
+# TrueFin USD (TFUSD) Agent — Background Monitoring & Audit Agent
+# =============================================================================
+# Monitors: contract health, peg status, pool balance, DON status
+# Calculates audit score (0-100) across 8 categories
+# Optional Telegram alerts via TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID
+# =============================================================================
+
+FROM node:20-alpine
+
+LABEL maintainer="TFUSD DevOps Team"
+LABEL service="tfusd-agent"
+LABEL version="1.0.0"
+
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+WORKDIR /app
+
+# Create data and logs directories and assign to node user
+RUN mkdir -p /app/data /app/logs && \
+    chown -R node:node /app
+
+# Install ethers.js and winston (agent runtime dependencies)
+RUN npm install ethers@6 winston@3 dotenv@17
+
+# Copy agent scripts and ABI
+COPY --chown=node:node scripts/agent.js scripts/contract-abi.json ./
+
+# Security: run as non-root
+USER node
+
+# Environment defaults
+ENV NODE_ENV=production
+ENV RPC_URL=http://hardhat:8545
+ENV AGENT_MODE=continuous
+ENV AGENT_POLL_INTERVAL_MS=30000
+ENV AGENT_LOG_LEVEL=info
+ENV AGENT_DATA_DIR=/app/data
+ENV AGENT_LOGS_DIR=/app/logs
+
+# Telegram alerting (optional)
+ENV TELEGRAM_ALERT_ENABLED=false
+ENV TELEGRAM_ALERT_SEVERITY=warning
+
+# Use dumb-init for graceful shutdown
+ENTRYPOINT ["dumb-init", "--"]
+
+# Run the agent
+CMD ["node", "agent.js"]

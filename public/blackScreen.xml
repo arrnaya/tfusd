@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SwiftMessage>
+
+  <Meta>
+    <Network>SWIFT NET</Network>
+    <PrintedDate>02/07/2026</PrintedDate>
+    <PrintedTime>10:01:23</PrintedTime>
+    <PrinterLabel>PRINTER IN 2026-07</PrinterLabel>
+    <DocumentRef>000000000SRT-NR-102-INTERNAL COPY</DocumentRef>
+  </Meta>
+
+  <MessageHeader>
+    <FundsType>M1 FUNDS</FundsType>
+    <UploadFormat>S2S UPLOAD FORMAT</UploadFormat>
+    <FileExtension>AES</FileExtension>
+    <FileFormat>FIN</FileFormat>
+    <FileFormatOption>CEF</FileFormatOption>
+    <Encoding>UTF-8</Encoding>
+    <Currency>EUR (EURO)</Currency>
+    <Amount>500,000,000.00</Amount>
+    <Date>02/07/2026</Date>
+    <Time>10:01:23</Time>
+  </MessageHeader>
+
+  <TransactionCodes>
+    <ReferenceNumber>DEUT56323524814238</ReferenceNumber>
+    <TransactionCode>144A:S:G4639DVY8</TransactionCode>
+    <ClearingCode>DE73148564856465443</ClearingCode>
+    <TransferDataEncryptionCode>DE90343042854584564889</TransferDataEncryptionCode>
+    <UploadCode>DE4092374937259872598</UploadCode>
+    <PermitCode>DE3092579841759437505</PermitCode>
+    <FinalReleaseCode>CR38828530</FinalReleaseCode>
+    <DownloadingCode>AM-7256-L-75962-98563-89281</DownloadingCode>
+    <AccessCode>bar 1588623</AccessCode>
+    <InterbankingBlockingCode>DE7094875483175890437045</InterbankingBlockingCode>
+  </TransactionCodes>
+
+  <ServerInfo>
+    <IdentityCode>27C-DB-FR-DE-17BEH</IdentityCode>
+    <ServerGlobalIDOrigin>AS6223</ServerGlobalIDOrigin>
+    <ServerGlobalIP>193.150.166.0/24 193.150.166.0/243</ServerGlobalIP>
+    <ClientNumber>00000000000000FGN470DEUTDEFF000000001244</ClientNumber>
+    <PermitArrivalMoneyNumber>DE4983237598475073438954</PermitArrivalMoneyNumber>
+    <WindowsTerminalServer>S0200235</WindowsTerminalServer>
+    <LoginDomain>DEUTDESS604</LoginDomain>
+    <LogonServer>43987453</LogonServer>
+  </ServerInfo>
+
+  <FarmAndUser>
+    <FarmName>FARM 42</FarmName>
+    <UserName>493069K1</UserName>
+    <UserID>FGN470</UserID>
+    <ClearingHouseNumber>DE40382403859050</ClearingHouseNumber>
+  </FarmAndUser>
+
+  <TransactionIdentifiers>
+    <TransactionID>DE9347983725927893</TransactionID>
+    <FinalBlockingCode>CR38828530</FinalBlockingCode>
+    <TransferCode>DE4403840938483950495</TransferCode>
+    <UniqueTransactionNumber>DE9328095849584980958</UniqueTransactionNumber>
+    <IMADNumber>27473436565</IMADNumber>
+  </TransactionIdentifiers>
+
+  <SenderOrderingCustomer>
+    <BankName>DEUTSCHE BANK AG</BankName>
+    <BankAddress>TAUNUSANLAGE 12, 60325 FRANKFURT AM MAIN, GERMANY</BankAddress>
+    <AccountName>Treuhand Finanzgruppe Account</AccountName>
+    <AccountNumber>DE96604700820065434300</AccountNumber>
+  </SenderOrderingCustomer>
+
+  <UploadStatus>
+    <IPSVRType>S2S UPLOAD ACCESS</IPSVRType>
+    <Status>FUNDS UPLOAD SUCCESSFUL</Status>
+    <Amount>500,000,000.00</Amount>
+    <Currency>EUR (EURO)</Currency>
+    <IPIPVersion>IPV4/IPV6</IPIPVersion>
+    <Progress>
+      <Step percent="10">SVR1</Step>
+      <Step percent="40">SVR2</Step>
+      <Step percent="80">SVR3</Step>
+      <Step percent="100">SVR4</Step>
+    </Progress>
+    <AccessGranted>true</AccessGranted>
+  </UploadStatus>
+
+  <LicenseActivations>
+    <License id="1">LANG4XGEPAY01 - active port-basic slot activated</License>
+    <License id="2">LANG8GEPAYG01 - active port-basic slot activated</License>
+    <License id="3">LANG2XGEPAY01 - active port-basic slot activated</License>
+  </LicenseActivations>
+
+  <HardwareVersions>
+    <PCBVersion>435435435 REV A</PCBVersion>
+    <EPLDVersion>V120</EPLDVersion>
+    <FPGAVersion>V130</FPGAVersion>
+    <INFOVersion>37489837 REV D</INFOVersion>
+  </HardwareVersions>
+
+  <CertificateChain>
+    <BeginCertificate>BEGIN CERTIFICATE</BeginCertificate>
+    <CertificateData>
+      adfby4x7n841y185x7780y4187x5y4784mnxh3r2uh0784byr780xhn4877xhnt74hf78x748013471xurb47ctrb7x6ucw78w467c45by7nx74s8ry
+      74850c4cn574xn84nl758ny5nx4hnu8hnxf74tnt4t7482mx2thf9xjfhnunhd2d2xny47fy4gnx7x4g7g4h9g7y49ggh334706c378v84365v4bd54
+      3dr8978f6g95f6h57gj479hj48hj4j3kgooej3xm49cn57c64b78xn7s847nc47b6ns39n5v84747667b478s3texgcgx3tbq7xrc38n85nv4n58903
+      8n4bx376z78n4x49c4nn8c894579466b46b5987598357908579465bc60b09xn03x5c0256087202935Z039x3n5chsb93bx3b4b23362c50265075
+      0928159164cbx95902565b0cb54xnxn50x4n56457b6bc50xnn2x5n2305xn0202nxn032n5cbb0556577602562678 5bc6x0xnxn54c7xn53270562
+      0c545b4c508460c380cb63476c587630b45xx5n045n04sj57d07v805bqcxn05e5h5cwb8vb56xn05sn785q29896774635926bx38n5z94875cb97
+      b5c89c5b9756cb9468c5bcb1072362365b7862587b28728751782b551xb0b505bx47805b087c5b08xbn5s230j7hf20326056325175c6055cbb
+      62b66527578520121016060157605178560115647384357834658b04053435b8x48x5b4378b4c5b745cb78cb3c5b3478c45cb478c56bcb543c5
+      bc5948374372749bc3c7475cn579nv797v368387056520216 7x2b6368b256873286374674072 86b6x5025x62705607010177287367 20b6x5126
+      3x4xn0xjjdj0djd0h6ch2570602813756h382250hxh7056c0326x77012x012580250x6x5017806x5016hc65056c16xh4178468h65c5dhd5jsj5
+      94dj6507627652b876585hs2257837h678368760347676 36h563sh2h6011aff
+    </CertificateData>
+    <EndCertificate>END CERTIFICATE</EndCertificate>
+  </CertificateChain>
+
+  <Completion>
+    <AccessStatus>ALL ACCESS HAS BEEN GRANTED</AccessStatus>
+    <ProgressCompleted>100%</ProgressCompleted>
+    <FinalAccess>ACCESS GRANTED</FinalAccess>
+  </Completion>
+
+  <Footer>
+    <EndOfMessage>END OF MESSAGE</EndOfMessage>
+    <Date>02/07/2026</Date>
+    <Time>10:05:36</Time>
+  </Footer>
+
+</SwiftMessage>

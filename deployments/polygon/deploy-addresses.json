@@ -1,0 +1,31 @@
+{
+  "network": "polygon",
+  "chainId": "137",
+  "deployedAt": "2026-07-06T10:40:12.869Z",
+  "deployer": "0x4B5909Af9d9946e164616cB7cF1748375059bB5D",
+  "create3Factory": "0x239Ba8cAb2Aa64Fe6854E209903391C12877E1D8",
+  "salts": {
+    "create3Factory": "0x72d8839abea0853f1a2ddc848895684a17c570a4b0bcdf744de90b3b199e4647",
+    "TreuhandFinanzgruppeUSD": "0x720dcf241183334b76d307754ef8d4872de5c348978f132cb6c829792a24a53e",
+    "TreuhandFinanzgruppeUSDDAO": "0xd64b850ed102167dc20ddf7c3f93a41505f48c0888a825db0bea619e53eba3c3"
+  },
+  "contracts": {
+    "TreuhandFinanzgruppeUSD": {
+      "address": "0x1794F2bb542c28c4Cf14872c39C2E31f740dd102",
+      "name": "Treuhand Finanzgruppe USD",
+      "symbol": "TFUSD",
+      "currency": "USD"
+    },
+    "TreuhandFinanzgruppeUSDDAO": {
+      "address": "0x441db754421AA93C7441732bf37FdA4e61b252e3",
+      "owner": "0x4B5909Af9d9946e164616cB7cF1748375059bB5D"
+    }
+  },
+  "roles": {
+    "owner": "0x4B5909Af9d9946e164616cB7cF1748375059bB5D",
+    "masterMinter": "0x4B5909Af9d9946e164616cB7cF1748375059bB5D",
+    "pauser": "0x4B5909Af9d9946e164616cB7cF1748375059bB5D",
+    "blacklister": "0x4B5909Af9d9946e164616cB7cF1748375059bB5D",
+    "rescuer": "0x4B5909Af9d9946e164616cB7cF1748375059bB5D"
+  }
+}

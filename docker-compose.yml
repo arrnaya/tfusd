@@ -1,0 +1,164 @@
+version: '3.8'
+
+# =============================================================================
+# Treuhand Finanzgruppe USD (TFUSD) — Docker Compose (Production-Ready)
+# =============================================================================
+# Services:
+#   - frontend      : nginx serving static Next.js build
+#   - hardhat       : Hardhat local BSC mainnet fork
+#   - auditor       : Background audit agent with optional Telegram alerts
+#   - reserve-minter: MAAL-balance-driven TFUSD mint/burn agent (BSC Mainnet)
+#
+# Security notes:
+#   * All containers run as non-root where possible.
+#   * Secrets live only in the host .env file and are never copied into images.
+#   * The reserve-minter defaults to DRY_RUN=true. Set RESERVE_MINTER_DRY_RUN=false
+#     only after verifying the signer has MASTERMINTER_ROLE and BNB for gas.
+# =============================================================================
+
+services:
+  # ───────────────────────────────────────────────────────────────────────────
+  # FRONTEND — nginx serving the Next.js static export
+  # ───────────────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: tfusd-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    networks:
+      - tfusd-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      hardhat:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # HARDHAT — Local BSC mainnet fork
+  # ───────────────────────────────────────────────────────────────────────────
+  hardhat:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.hardhat
+    container_name: tfusd-hardhat
+    restart: unless-stopped
+    ports:
+      - "8545:8545"
+    networks:
+      - tfusd-network
+    env_file:
+      - .env
+    volumes:
+      - hardhat-contracts:/app/contracts
+      - hardhat-artifacts:/app/artifacts
+      - hardhat-cache:/app/cache
+      - hardhat-deployments:/app/deployments
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8545"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # AUDITOR — Background monitoring & audit agent with Telegram alerts
+  # ───────────────────────────────────────────────────────────────────────────
+  auditor:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.agent
+    container_name: tfusd-auditor
+    restart: unless-stopped
+    networks:
+      - tfusd-network
+    env_file:
+      - .env
+    environment:
+      - RPC_URL=http://hardhat:8545
+      - AGENT_MODE=continuous
+    volumes:
+      - auditor-data:/app/data
+      - auditor-logs:/app/logs
+      - hardhat-deployments:/app/deployments:ro
+    depends_on:
+      hardhat:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('fs').accessSync('/app/data/last-ping.json')"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # RESERVE MINTER — MAAL-balance-driven mint/burn on BSC Mainnet
+  # ───────────────────────────────────────────────────────────────────────────
+  reserve-minter:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.reserve-minter
+    container_name: tfusd-reserve-minter
+    restart: unless-stopped
+    networks:
+      - tfusd-network
+    env_file:
+      - .env
+    volumes:
+      - reserve-minter-data:/app/data
+      - reserve-minter-logs:/app/logs
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('fs').accessSync('/app/data/reserve-minter-state.json')"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  tfusd-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  hardhat-contracts:
+  hardhat-artifacts:
+  hardhat-cache:
+  hardhat-deployments:
+  auditor-data:
+  auditor-logs:
+  reserve-minter-data:
+  reserve-minter-logs:

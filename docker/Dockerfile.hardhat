@@ -1,0 +1,61 @@
+# =============================================================================
+# TrueFin USD (TFUSD) Hardhat Node — BSC Testnet Fork
+# =============================================================================
+# Starts a local Hardhat node forked from BSC testnet on port 8545.
+# Includes TFUSD.sol and TFUSDDAO.sol contracts + deployment scripts.
+# =============================================================================
+
+FROM node:20-alpine
+
+LABEL maintainer="TFUSD DevOps Team"
+LABEL service="tfusd-hardhat"
+LABEL version="1.0.0"
+
+WORKDIR /app
+
+# Install build dependencies (python3, make, g++ for native modules)
+RUN apk add --no-cache python3 make g++ curl
+
+# Install Hardhat and toolbox globally in the image
+RUN npm install -g hardhat@2.22.0
+
+# Copy package dependencies
+COPY package.json ./
+RUN npm install --ignore-scripts 2>/dev/null || true
+
+# Install Hardhat and toolbox dependencies locally
+RUN npm install --save-dev hardhat@2.22.0 @nomicfoundation/hardhat-toolbox \
+  @nomicfoundation/hardhat-chai-matchers \
+  @nomicfoundation/hardhat-ethers \
+  @nomicfoundation/hardhat-verify \
+  chai ethers@6 hardhat-gas-reporter solidity-coverage \
+  @typechain/hardhat typechain @typechain/ethers-v6
+
+# Copy Hardhat config
+COPY hardhat.config.js ./
+
+# Copy contracts into the expected sources directory
+COPY TFUSD.sol ./contracts/
+COPY TFUSDDAO.sol ./contracts/
+
+# Copy deployment scripts
+COPY scripts/deploy.js ./scripts/
+
+# Copy environment template (will be overridden by docker-compose env_file)
+COPY .env.example ./
+
+# Expose the Hardhat JSON-RPC port
+EXPOSE 8545
+
+# Health check: verify the node is responding
+HEALTHCHECK --interval=15s --timeout=10s --start-period=30s --retries=5 \
+  CMD wget --quiet --tries=1 --spider http://localhost:8545 || exit 1
+
+# Start Hardhat node in persistent mode, forked from BSC testnet
+# The "&" starts the node in background, then we deploy and keep the node alive.
+CMD sh -c \
+  'npx hardhat node --hostname 0.0.0.0 & \
+   sleep 8 && \
+   npx hardhat run scripts/deploy.js --network localhost && \
+   echo "[Hardhat] Contracts deployed. Node running on port 8545." && \
+   wait'

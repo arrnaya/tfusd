@@ -1,0 +1,31 @@
+{
+  "network": "hardhat",
+  "chainId": "31337",
+  "deployedAt": "2026-07-06T08:41:48.023Z",
+  "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "create3Factory": "0x239Ba8cAb2Aa64Fe6854E209903391C12877E1D8",
+  "salts": {
+    "create3Factory": "0x72d8839abea0853f1a2ddc848895684a17c570a4b0bcdf744de90b3b199e4647",
+    "TrueFinUSD": "0xbe8640e40297e590584fe82d64fabd8bcf360af792a3bfee1c4faee65112b95e",
+    "TrueFinUSDDAO": "0xc71defa076f2b0f10cadbedce12d6181ad1b79c38b172db7debd8f6a52ee795d"
+  },
+  "contracts": {
+    "TrueFinUSD": {
+      "address": "0xB30e719A3B193FDbE12a20D3c02Fc3cd4e3B4892",
+      "name": "TrueFin USD",
+      "symbol": "TFUSD",
+      "currency": "USD"
+    },
+    "TrueFinUSDDAO": {
+      "address": "0xA2b2586E034c7a7468a273418842de6B335D1730",
+      "owner": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+    }
+  },
+  "roles": {
+    "owner": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "masterMinter": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "pauser": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "blacklister": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "rescuer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+  }
+}
