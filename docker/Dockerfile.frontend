@@ -32,11 +32,7 @@ COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 # Copy static build output from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Create non-root user for nginx
-RUN addgroup -g 101 -S nginx && \
-    adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx nginx
-
-# Fix permissions
+# Fix permissions for the existing nginx non-root user
 RUN chown -R nginx:nginx /usr/share/nginx/html && \
     chmod -R 755 /usr/share/nginx/html && \
     chown -R nginx:nginx /var/cache/nginx && \
