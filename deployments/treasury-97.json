@@ -1,0 +1,11 @@
+{
+  "chainId": 97,
+  "treasuryProxy": "0x4B25a06003E04Ce2B131468Cb3CBf481aDe0c6E5",
+  "treasuryImplementation": "0x95b75B74FfA0696205ae9B05530b006E6240AF55",
+  "tfusd": "0x12d7bf12dF9A59f8494f6b8899BC434d59a965AC",
+  "collaterals": [
+    "0x39895F288b5537B33C30AAF3d2709faaaE247813",
+    "0x551D49441448666615CE6c38AAEB24B11b5Cd19e"
+  ],
+  "deployedAt": "2026-07-07T04:23:50.020Z"
+}

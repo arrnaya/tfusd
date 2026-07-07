@@ -50,6 +50,11 @@ module.exports = {
       chainId: 56,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
+    bscTestnet: {
+      url: process.env.BSC_TESTNET_RPC || 'https://bsc-testnet-rpc.publicnode.com',
+      chainId: 97,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+    },
   },
   etherscan: {
     // Etherscan API V2 uses a single Etherscan.io API key for all supported
