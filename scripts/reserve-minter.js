@@ -62,6 +62,9 @@ const MAX_TOTAL_SUPPLY_USD = parseFloat(
 const MIN_ACTION_AMOUNT_USD = parseFloat(
   process.env.RESERVE_MINTER_MIN_ACTION_USD || '1'
 );
+const REBALANCE_THRESHOLD = parseFloat(
+  process.env.RESERVE_MINTER_REBALANCE_THRESHOLD || '0.01'
+);
 const PRICE_CACHE_TTL_MS = parseInt(
   process.env.RESERVE_MINTER_PRICE_CACHE_MS || '60000',
   10
@@ -132,6 +135,7 @@ let lastPrice = null;
 let lastPriceAt = 0;
 const lastKnownPerNetworkSupply = {};
 let isActing = false;
+let lastActionReserveUsd = null;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function sleep(ms) {
@@ -168,6 +172,23 @@ function saveState(state) {
     );
   } catch (err) {
     logger.warn(`Failed to write reserve-minter-state.json: ${err.message}`);
+  }
+}
+
+function loadState() {
+  try {
+    const file = path.join(DATA_DIR, 'reserve-minter-state.json');
+    if (fs.existsSync(file)) {
+      const data = JSON.parse(fs.readFileSync(file, 'utf-8'));
+      if (typeof data.lastActionReserveUsd === 'number') {
+        lastActionReserveUsd = data.lastActionReserveUsd;
+        logger.info(
+          `Loaded last action reserve value: $${formatNumber(lastActionReserveUsd, 2)}`
+        );
+      }
+    }
+  } catch (err) {
+    logger.warn(`Failed to load reserve-minter-state.json: ${err.message}`);
   }
 }
 
@@ -270,6 +291,8 @@ async function runCycle() {
     totalSupply: null,
     perNetworkSupply: {},
     deltaUsd: null,
+    rebalanceThreshold: REBALANCE_THRESHOLD,
+    lastActionReserveUsd,
     action: 'none',
     txHash: null,
     error: null,
@@ -309,6 +332,24 @@ async function runCycle() {
       )}`
     );
 
+    const reserveChangeRatio =
+      lastActionReserveUsd === null
+        ? Infinity
+        : Math.abs(maalUsd - lastActionReserveUsd) / lastActionReserveUsd;
+
+    if (reserveChangeRatio < REBALANCE_THRESHOLD) {
+      logger.info(
+        `Reserve value changed ${formatNumber(reserveChangeRatio * 100, 4)}% ` +
+          `(threshold ${formatNumber(REBALANCE_THRESHOLD * 100, 4)}%); no action.`
+      );
+      saveState(state);
+      return;
+    }
+
+    logger.info(
+      `Reserve value moved ${formatNumber(reserveChangeRatio * 100, 2)}% since last action; rebalancing.`
+    );
+
     if (Math.abs(deltaUsd) < MIN_ACTION_AMOUNT_USD) {
       logger.info(
         `Delta $${formatNumber(deltaUsd, 4)} below threshold ($${formatNumber(
@@ -339,6 +380,10 @@ async function runCycle() {
           )} TFUSD to ${recipientAddress}`
         );
         state.action = DISABLED ? 'disabled_mint' : 'dry_run_mint';
+        if (!DISABLED) {
+          lastActionReserveUsd = maalUsd;
+          state.lastActionReserveUsd = maalUsd;
+        }
       } else {
         isActing = true;
         try {
@@ -351,6 +396,8 @@ async function runCycle() {
           );
           state.action = 'mint';
           state.txHash = receipt.hash;
+          lastActionReserveUsd = maalUsd;
+          state.lastActionReserveUsd = maalUsd;
         } finally {
           isActing = false;
         }
@@ -388,6 +435,10 @@ async function runCycle() {
           )} TFUSD from ${signerAddress}`
         );
         state.action = DISABLED ? 'disabled_burn' : 'dry_run_burn';
+        if (!DISABLED) {
+          lastActionReserveUsd = maalUsd;
+          state.lastActionReserveUsd = maalUsd;
+        }
       } else {
         isActing = true;
         try {
@@ -400,6 +451,8 @@ async function runCycle() {
           );
           state.action = 'burn';
           state.txHash = receipt.hash;
+          lastActionReserveUsd = maalUsd;
+          state.lastActionReserveUsd = maalUsd;
         } finally {
           isActing = false;
         }
@@ -452,6 +505,9 @@ async function initialize() {
     );
   }
 
+  // Load persisted state so we don't re-mint on restart unless reserves moved.
+  loadState();
+
   // Warm up the BSC connection.
   const blockNumber = await provider.getBlockNumber();
   logger.info(`Connected to BSC Mainnet at block ${blockNumber}.`);
@@ -469,6 +525,7 @@ async function main() {
   logger.info(`  Target ratio:  ${MINT_RATIO * 100}%`);
   logger.info(`  Global cap:    $${formatNumber(MAX_TOTAL_SUPPLY_USD, 0)}`);
   logger.info(`  Min action:    $${formatNumber(MIN_ACTION_AMOUNT_USD, 4)}`);
+  logger.info(`  Rebalance threshold: ${formatNumber(REBALANCE_THRESHOLD * 100, 2)}%`);
   logger.info(`  Mode:          ${DISABLED ? 'DISABLED' : DRY_RUN ? 'DRY RUN' : 'LIVE'}`);
   logger.info('──────────────────────────────────────────────────────────────────');
 
