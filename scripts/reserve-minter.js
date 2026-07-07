@@ -332,23 +332,29 @@ async function runCycle() {
       )}`
     );
 
-    const reserveChangeRatio =
-      lastActionReserveUsd === null
-        ? Infinity
-        : Math.abs(maalUsd - lastActionReserveUsd) / lastActionReserveUsd;
-
-    if (reserveChangeRatio < REBALANCE_THRESHOLD) {
+    if (lastActionReserveUsd === null) {
+      if (Math.abs(deltaUsd) < MIN_ACTION_AMOUNT_USD) {
+        logger.info('Establishing reserve baseline; supply already aligned.');
+        lastActionReserveUsd = maalUsd;
+        state.lastActionReserveUsd = maalUsd;
+        saveState(state);
+        return;
+      }
+      logger.info('No prior reserve baseline; rebalancing now.');
+    } else {
+      const reserveChangeRatio = Math.abs(maalUsd - lastActionReserveUsd) / lastActionReserveUsd;
+      if (reserveChangeRatio < REBALANCE_THRESHOLD) {
+        logger.info(
+          `Reserve value changed ${formatNumber(reserveChangeRatio * 100, 4)}% ` +
+            `(threshold ${formatNumber(REBALANCE_THRESHOLD * 100, 4)}%); no action.`
+        );
+        saveState(state);
+        return;
+      }
       logger.info(
-        `Reserve value changed ${formatNumber(reserveChangeRatio * 100, 4)}% ` +
-          `(threshold ${formatNumber(REBALANCE_THRESHOLD * 100, 4)}%); no action.`
+        `Reserve value moved ${formatNumber(reserveChangeRatio * 100, 2)}% since last action; rebalancing.`
       );
-      saveState(state);
-      return;
     }
-
-    logger.info(
-      `Reserve value moved ${formatNumber(reserveChangeRatio * 100, 2)}% since last action; rebalancing.`
-    );
 
     if (Math.abs(deltaUsd) < MIN_ACTION_AMOUNT_USD) {
       logger.info(
