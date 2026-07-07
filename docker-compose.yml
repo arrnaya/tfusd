@@ -92,6 +92,7 @@ services:
       - RPC_URL=${BSC_MAINNET_RPC:-https://bsc-rpc.publicnode.com}
       - TFUSD_CONTRACT_ADDRESS=${TFUSD_CONTRACT_ADDRESS:-0x1794F2bb542c28c4Cf14872c39C2E31f740dd102}
       - TFUSD_DAO_ADDRESS=${TFUSD_DAO_ADDRESS:-0x441db754421AA93C7441732bf37FdA4e61b252e3}
+      - TELEGRAM_ALERT_ENABLED=${TELEGRAM_ALERT_ENABLED:-true}
       - AGENT_MODE=continuous
     volumes:
       - auditor-data:/app/data
