@@ -27,6 +27,8 @@ export default function Header() {
         <Link href="/supply" style={{ ...styles.navLink, ...(pathname === '/supply' ? styles.navLinkActive : {}) }}>Supply</Link>
         <Link href="/dao" style={{ ...styles.navLink, ...(pathname === '/dao' ? styles.navLinkActive : {}) }}>DAO</Link>
         <Link href="/admin" style={{ ...styles.navLink, ...(pathname === '/admin' ? styles.navLinkActive : {}) }}>Admin</Link>
+        <Link href="/mint" style={{ ...styles.navLink, ...(pathname === '/mint' ? styles.navLinkActive : {}) }}>Mint</Link>
+        <Link href="/stake" style={{ ...styles.navLink, ...(pathname === '/stake' ? styles.navLinkActive : {}) }}>Stake</Link>
       </nav>
 
       <div style={styles.headerRight}>
