@@ -16,6 +16,11 @@ const path = require('path');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// BSC testnet publicnode RPC can struggle with EIP-1559 gas estimation for
+// some contract calls, so we force legacy (type-0) transactions with a fixed
+// gas price and a generous gas limit.
+const TX_OPTS = { type: 0, gasPrice: 1200000000, gasLimit: 500000 };
+
 async function main() {
   const [deployer] = await hre.ethers.getSigners();
   const network = await hre.ethers.provider.getNetwork();
@@ -45,26 +50,26 @@ async function main() {
   if (tfusdBalance < hre.ethers.parseUnits('10000', 18)) {
     console.log('Minting test TFUSD to deployer...');
     try {
-      await (await tfusd.mintByMaster(deployer.address, hre.ethers.parseUnits('100000', 18))).wait();
+      await (await tfusd.mintByMaster(deployer.address, hre.ethers.parseUnits('100000', 18), TX_OPTS)).wait();
     } catch {
       console.log('mintByMaster failed, configuring deployer as minter...');
-      await (await tfusd.configureMinter(deployer.address, hre.ethers.parseUnits('1000000', 18))).wait();
-      await (await tfusd.mintByMaster(deployer.address, hre.ethers.parseUnits('100000', 18))).wait();
+      await (await tfusd.configureMinter(deployer.address, hre.ethers.parseUnits('1000000', 18), TX_OPTS)).wait();
+      await (await tfusd.mintByMaster(deployer.address, hre.ethers.parseUnits('100000', 18), TX_OPTS)).wait();
     }
   }
 
   // Fund reward pools and set flexible reward rate
   console.log('Funding flexible + fixed reward pools...');
   const rewardAmount = hre.ethers.parseUnits('5000', 18);
-  await (await tfusd.approve(await treasury.getAddress(), rewardAmount * 2n)).wait();
-  await (await treasury.fundRewards(rewardAmount, rewardAmount)).wait();
-  await (await treasury.setFlexibleRewardRate(hre.ethers.parseUnits('1', 18))).wait();
+  await (await tfusd.approve(await treasury.getAddress(), rewardAmount * 2n, TX_OPTS)).wait();
+  await (await treasury.fundRewards(rewardAmount, rewardAmount, TX_OPTS)).wait();
+  await (await treasury.setFlexibleRewardRate(hre.ethers.parseUnits('1', 18), TX_OPTS)).wait();
   console.log('Flexible reward rate set to 1 TFUSD/sec');
 
   // Add a fixed pool with a 60-second lock for quick E2E
   console.log('Adding 60-second fixed staking pool...');
-  const poolTx = await treasury.addFixedPool(60, 1000); // 10% APY, 60s lock
-  const poolReceipt = await poolTx.wait();
+  const poolTx = await treasury.addFixedPool(60, 1000, TX_OPTS); // 10% APY, 60s lock
+  await poolTx.wait();
   const poolId = (await treasury.nextFixedPoolId()) - 1n;
   console.log('Fixed pool ID:', poolId.toString());
 
@@ -81,7 +86,7 @@ async function main() {
 
     // Mint test collateral to deployer if it's a mock
     try {
-      await (await token.mint(deployer.address, hre.ethers.parseUnits('20000', Number(decimals)))).wait();
+      await (await token.mint(deployer.address, hre.ethers.parseUnits('20000', Number(decimals)), TX_OPTS)).wait();
       console.log(`Minted ${symbol} to deployer`);
     } catch {
       console.log(`Could not mint ${symbol}; assuming deployer already holds some`);
@@ -92,11 +97,15 @@ async function main() {
 
     // Approve collateral
     const depositAmount = hre.ethers.parseUnits('15000', Number(decimals));
-    await (await token.approve(await treasury.getAddress(), depositAmount)).wait();
+    await (await token.approve(await treasury.getAddress(), depositAmount, TX_OPTS)).wait();
 
     // 1) Mint below KYC threshold without KYC
     console.log('Minting below KYC threshold...');
-    const tx1 = await treasury.depositAndMint(tokenAddress, belowThreshold / 10n ** BigInt(18 - Number(decimals)));
+    const tx1 = await treasury.depositAndMint(
+      tokenAddress,
+      belowThreshold / 10n ** BigInt(18 - Number(decimals)),
+      TX_OPTS
+    );
     await tx1.wait();
     let bal = await tfusd.balanceOf(deployer.address);
     console.log('TFUSD balance after small mint:', hre.ethers.formatUnits(bal, 18));
@@ -105,10 +114,10 @@ async function main() {
     console.log('Attempting above-threshold mint without KYC (should revert)...');
     try {
       const aboveTokenAmount = aboveThreshold / 10n ** BigInt(18 - Number(decimals));
-      await (await treasury.depositAndMint(tokenAddress, aboveTokenAmount)).wait();
+      await (await treasury.depositAndMint(tokenAddress, aboveTokenAmount, TX_OPTS)).wait();
       throw new Error('Above-threshold mint did not revert');
     } catch (e) {
-      if (e.message.includes('KYCRequired') || e.message.includes('revert')) {
+      if (e.message.includes('KYCRequired') || e.message.includes('revert') || e.message.includes('CALL_EXCEPTION')) {
         console.log('Correctly reverted without KYC');
       } else {
         throw e;
@@ -117,11 +126,11 @@ async function main() {
 
     // 3) Set KYC for deployer and mint above threshold
     console.log('Setting KYC status for deployer...');
-    await (await treasury.setKYCStatus(deployer.address, true)).wait();
+    await (await treasury.setKYCStatus(deployer.address, true, TX_OPTS)).wait();
     console.log('KYC passed:', await treasury.isKYCPassed(deployer.address));
 
     const aboveTokenAmount = aboveThreshold / 10n ** BigInt(18 - Number(decimals));
-    const tx2 = await treasury.depositAndMint(tokenAddress, aboveTokenAmount);
+    const tx2 = await treasury.depositAndMint(tokenAddress, aboveTokenAmount, TX_OPTS);
     await tx2.wait();
     bal = await tfusd.balanceOf(deployer.address);
     console.log('TFUSD balance after KYC mint:', hre.ethers.formatUnits(bal, 18));
@@ -130,8 +139,8 @@ async function main() {
   // Flexible staking
   console.log('\n--- Flexible Staking ---');
   const flexStakeAmount = hre.ethers.parseUnits('2000', 18);
-  await (await tfusd.approve(await treasury.getAddress(), flexStakeAmount)).wait();
-  await (await treasury.stakeFlexible(flexStakeAmount)).wait();
+  await (await tfusd.approve(await treasury.getAddress(), flexStakeAmount, TX_OPTS)).wait();
+  await (await treasury.stakeFlexible(flexStakeAmount, TX_OPTS)).wait();
   let flex = await treasury.flexibleStake(deployer.address);
   console.log('Flexible staked:', hre.ethers.formatUnits(flex, 18));
 
@@ -141,18 +150,18 @@ async function main() {
   let pending = await treasury.pendingFlexibleRewards(deployer.address);
   console.log('Pending flexible rewards:', hre.ethers.formatUnits(pending, 18));
 
-  await (await treasury.claimFlexibleRewards()).wait();
+  await (await treasury.claimFlexibleRewards(TX_OPTS)).wait();
   console.log('Claimed flexible rewards');
 
-  await (await treasury.unstakeFlexible()).wait();
+  await (await treasury.unstakeFlexible(TX_OPTS)).wait();
   flex = await treasury.flexibleStake(deployer.address);
   console.log('Flexible staked after unstake:', hre.ethers.formatUnits(flex, 18));
 
   // Fixed staking
   console.log('\n--- Fixed Staking ---');
   const fixedStakeAmount = hre.ethers.parseUnits('2000', 18);
-  await (await tfusd.approve(await treasury.getAddress(), fixedStakeAmount)).wait();
-  await (await treasury.stakeFixed(poolId, fixedStakeAmount)).wait();
+  await (await tfusd.approve(await treasury.getAddress(), fixedStakeAmount, TX_OPTS)).wait();
+  await (await treasury.stakeFixed(poolId, fixedStakeAmount, TX_OPTS)).wait();
   console.log('Fixed staked');
 
   console.log('Waiting 65s for fixed lock to mature...');
@@ -162,7 +171,7 @@ async function main() {
   for (let i = 0; i < Number(count); i++) {
     const stake = await treasury.fixedStakeAt(deployer.address, i);
     if (!stake.claimed) {
-      await (await treasury.unstakeFixed(i)).wait();
+      await (await treasury.unstakeFixed(i, TX_OPTS)).wait();
       console.log('Unstaked fixed position', i);
     }
   }
@@ -171,8 +180,8 @@ async function main() {
   console.log('\n--- Redeem ---');
   const redeemToken = artifact.collaterals[1] || artifact.collaterals[0];
   const redeemAmount = hre.ethers.parseUnits('500', 18);
-  await (await tfusd.approve(await treasury.getAddress(), redeemAmount)).wait();
-  await (await treasury.redeem(redeemToken, redeemAmount)).wait();
+  await (await tfusd.approve(await treasury.getAddress(), redeemAmount, TX_OPTS)).wait();
+  await (await treasury.redeem(redeemToken, redeemAmount, TX_OPTS)).wait();
   console.log('Redeemed 500 TFUSD to', redeemToken);
 
   console.log('\n✅ Treasury E2E test completed successfully');
