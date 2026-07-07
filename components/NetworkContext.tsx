@@ -53,7 +53,7 @@ function saveNetwork(key: HeaderNetworkKey) {
 }
 
 function isValidNetworkKey(key: string): key is HeaderNetworkKey {
-  return ['combined', 'bsc-mainnet', 'ethereum', 'polygon'].includes(key);
+  return ['combined', 'bsc-mainnet', 'bsc-testnet', 'ethereum', 'polygon'].includes(key);
 }
 
 export function NetworkProvider({ children }: { children: React.ReactNode }) {

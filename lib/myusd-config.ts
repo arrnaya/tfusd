@@ -2,7 +2,7 @@
 // Multi-network configuration. Add new deployed networks here and the UI will
 // automatically list them in the network switcher.
 
-export type NetworkKey = 'bsc-mainnet' | 'ethereum' | 'polygon';
+export type NetworkKey = 'bsc-mainnet' | 'bsc-testnet' | 'ethereum' | 'polygon';
 
 export interface NetworkConfig {
   key: NetworkKey;
@@ -34,6 +34,27 @@ const TFUSD_CONTRACT_ADDRESS = env('NEXT_PUBLIC_TFUSD_CONTRACT', '0x1794F2bb542c
 const DAO_CONTRACT_ADDRESS = env('NEXT_PUBLIC_DAO_CONTRACT', '0x441db754421AA93C7441732bf37FdA4e61b252e3');
 
 export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
+  'bsc-testnet': {
+    key: 'bsc-testnet',
+    name: 'BSC Testnet',
+    shortName: 'BSC Testnet',
+    chainId: 97,
+    rpcUrl: env('NEXT_PUBLIC_BSC_TESTNET_RPC', 'https://bsc-testnet-rpc.publicnode.com'),
+    explorerUrl: 'https://testnet.bscscan.com',
+    decimals: 18,
+    currency: 'USD',
+    symbol: 'TFUSD',
+    nameToken: 'Treuhand Finanzgruppe USD',
+    contractAddress: env('NEXT_PUBLIC_TFUSD_CONTRACT_TESTNET', '0x12d7bf12dF9A59f8494f6b8899BC434d59a965AC'),
+    daoAddress: env('NEXT_PUBLIC_DAO_CONTRACT_TESTNET', '0x7A60547269b245e8D430bb101f531bEBe164CDB7'),
+    poolAddress: env('NEXT_PUBLIC_POOL_CONTRACT_BSC_TESTNET', '0x0000000000000000000000000000000000000000'),
+    poolTargetBalance: '1000000000',
+    geckoNetwork: env('NEXT_PUBLIC_GECKO_NETWORK_BSC_TESTNET', 'bsc'),
+    geckoPoolAddress: env('NEXT_PUBLIC_GECKO_POOL_BSC_TESTNET', ''),
+    geckoTokenAddress: env('NEXT_PUBLIC_GECKO_TOKEN_BSC_TESTNET', ''),
+    pricePollInterval: 30000,
+    isTestnet: true,
+  },
   'bsc-mainnet': {
     key: 'bsc-mainnet',
     name: 'BSC Mainnet',

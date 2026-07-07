@@ -22,6 +22,24 @@ export interface TreasuryNetworkConfig {
 const env = (key: string, fallback: string): string => process.env[key] || fallback;
 
 export const TREASURY_NETWORKS: Record<NetworkKey, TreasuryNetworkConfig> = {
+  'bsc-testnet': {
+    treasuryAddress: env('NEXT_PUBLIC_TREASURY_ADDRESS_BSC_TESTNET', '0x4B25a06003E04Ce2B131468Cb3CBf481aDe0c6E5'),
+    tfusdAddress: NETWORKS['bsc-testnet'].contractAddress,
+    collaterals: [
+      {
+        symbol: 'tUSDT',
+        address: env('NEXT_PUBLIC_TREASURY_TUSDT_TESTNET', '0x39895F288b5537B33C30AAF3d2709faaaE247813'),
+        decimals: 18,
+        icon: '💲',
+      },
+      {
+        symbol: 'tUSDC',
+        address: env('NEXT_PUBLIC_TREASURY_TUSDC_TESTNET', '0x551D49441448666615CE6c38AAEB24B11b5Cd19e'),
+        decimals: 18,
+        icon: '💵',
+      },
+    ],
+  },
   'bsc-mainnet': {
     treasuryAddress: env('NEXT_PUBLIC_TREASURY_ADDRESS_BSC', '0x0000000000000000000000000000000000000000'),
     tfusdAddress: NETWORKS['bsc-mainnet'].contractAddress,
