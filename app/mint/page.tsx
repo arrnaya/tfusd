@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ethers } from 'ethers';
 import Header from '@/components/Header';
 import ConnectWallet from '@/components/ConnectWallet';
-import { usePublicAuth } from '@/components/PublicAuthContext';
 import { useWallet } from '@/components/WalletContext';
+import WalletGate from '@/components/WalletGate';
 import { useNetwork } from '@/components/NetworkContext';
 import KYCModal from '@/components/KYCModal';
 import { TREASURY_ABI } from '@/lib/treasury-abi';
@@ -13,14 +13,14 @@ import { TFUSD_ABI } from '@/lib/contract-abi';
 import { ERC20_ABI, getTreasuryConfig, parseUnits, formatUnits } from '@/lib/treasury-config';
 
 export default function MintPage() {
-  const { isAuthenticated, user, email, setEmail, sendOTP, verifyOTP, logout } = usePublicAuth();
   const { signer, address, isConnected, ethersProvider } = useWallet();
-  const { networkConfig } = useNetwork();
+  const { networkConfig, networkKey, setNetwork } = useNetwork();
 
-  const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [simulatedCode, setSimulatedCode] = useState<string | undefined>();
-  const [otpError, setOtpError] = useState<string | null>(null);
+  useEffect(() => {
+    if (networkKey !== 'bsc-mainnet' && networkKey !== 'bsc-testnet') {
+      setNetwork('bsc-testnet');
+    }
+  }, [networkKey, setNetwork]);
 
   const [amount, setAmount] = useState('');
   const [selectedSymbol, setSelectedSymbol] = useState<string>('USDC');
@@ -36,6 +36,10 @@ export default function MintPage() {
   const [isKYCPassed, setIsKYCPassed] = useState(false);
 
   const treasuryConfig = useMemo(() => getTreasuryConfig(networkConfig.key as any), [networkConfig.key]);
+  const isTreasuryDeployed = useMemo(
+    () => treasuryConfig.treasuryAddress !== '0x0000000000000000000000000000000000000000',
+    [treasuryConfig.treasuryAddress]
+  );
   const collateral = useMemo(
     () => treasuryConfig.collaterals.find((c) => c.symbol === selectedSymbol) || treasuryConfig.collaterals[0],
     [treasuryConfig, selectedSymbol]
@@ -109,23 +113,6 @@ export default function MintPage() {
     return parsedAmount > 0n && allowance < parsedAmount;
   }, [parsedAmount, allowance]);
 
-  const handleSendOTP = async () => {
-    setOtpError(null);
-    const res = await sendOTP();
-    if (res.success) {
-      setOtpSent(true);
-      setSimulatedCode(res.simulatedCode);
-    } else {
-      setOtpError(res.error || 'Failed to send OTP');
-    }
-  };
-
-  const handleVerifyOTP = () => {
-    setOtpError(null);
-    const res = verifyOTP(otp);
-    if (!res.success) setOtpError(res.error || 'Invalid OTP');
-  };
-
   const handleApprove = async () => {
     if (!signer || !collateralToken || parsedAmount === 0n) return;
     setLoading(true);
@@ -170,57 +157,10 @@ export default function MintPage() {
     }
   };
 
-  if (!isAuthenticated) {
-    return (
+  return (
+    <WalletGate>
       <div style={page}>
         <Header />
-        <main style={container}>
-          <div style={card}>
-            <h1 style={heading}>Mint TFUSD</h1>
-            <p style={sub}>Enter your email to receive a one-time passcode.</p>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              style={input}
-              disabled={otpSent}
-            />
-            {!otpSent ? (
-              <button onClick={handleSendOTP} style={primaryBtn}>
-                Send OTP
-              </button>
-            ) : (
-              <>
-                <input
-                  type="text"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  placeholder="123456"
-                  style={input}
-                  maxLength={6}
-                />
-                {simulatedCode && (
-                  <div style={demoCode}>Demo code: <strong>{simulatedCode}</strong></div>
-                )}
-                <button onClick={handleVerifyOTP} style={primaryBtn}>
-                  Verify & Continue
-                </button>
-                <button onClick={() => setOtpSent(false)} style={ghostBtn}>
-                  Use another email
-                </button>
-              </>
-            )}
-            {otpError && <div style={error}>{otpError}</div>}
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  return (
-    <div style={page}>
-      <Header />
       <main style={container}>
         <div style={card}>
           <div style={headerRow}>
@@ -228,13 +168,6 @@ export default function MintPage() {
             <ConnectWallet />
           </div>
           <p style={sub}>Deposit USDT or USDC and receive TFUSD 1:1.</p>
-
-          {user && (
-            <div style={infoRow}>
-              <span style={muted}>Logged in as {user.email}</span>
-              <button onClick={logout} style={smallGhost}>Logout</button>
-            </div>
-          )}
 
           <div style={balances}>
             <div style={balanceItem}>
@@ -289,8 +222,8 @@ export default function MintPage() {
 
           <button
             onClick={handleMint}
-            disabled={loading || !isConnected || parsedAmount === 0n}
-            style={{ ...primaryBtn, opacity: loading || !isConnected || parsedAmount === 0n ? 0.6 : 1 }}
+            disabled={loading || !isConnected || parsedAmount === 0n || !isTreasuryDeployed}
+            style={{ ...primaryBtn, opacity: loading || !isConnected || parsedAmount === 0n || !isTreasuryDeployed ? 0.6 : 1 }}
           >
             {loading ? 'Processing...' : needsApprove ? 'Approve & Mint' : 'Mint TFUSD'}
           </button>
@@ -298,6 +231,9 @@ export default function MintPage() {
           {status && <div style={statusStyle(status)}>{status}</div>}
 
           {!isConnected && <div style={warning}>Please connect your wallet to continue.</div>}
+          {isConnected && !isTreasuryDeployed && (
+            <div style={warning}>Treasury is not deployed on {networkConfig.name}. Switch to BSC Testnet.</div>
+          )}
         </div>
       </main>
 
@@ -312,7 +248,8 @@ export default function MintPage() {
           }}
         />
       )}
-    </div>
+      </div>
+    </WalletGate>
   );
 }
 

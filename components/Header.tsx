@@ -1,14 +1,10 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from './AuthContext';
-import { useAudit } from './AuditContext';
 
 export default function Header() {
   const { user, isAuthenticated, logout } = useAuth();
-  const { result } = useAudit();
   const pathname = usePathname();
-
-  const scoreColor = result.overallScore >= 80 ? '#00ff88' : result.overallScore >= 50 ? '#fbbf24' : '#ef4444';
 
   return (
     <header style={styles.header}>
@@ -34,10 +30,6 @@ export default function Header() {
       <div style={styles.headerRight}>
         {isAuthenticated && user && (
           <>
-            <div style={{ ...styles.auditBadge, borderColor: scoreColor, color: scoreColor, background: scoreColor + '15' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>{result.grade}</span>
-              <span style={{ fontSize: '10px', opacity: 0.8 }}>{result.overallScore}</span>
-            </div>
             <span style={styles.roleBadge}>{user.role}</span>
             <button onClick={logout} style={styles.logoutBtn}>Logout</button>
           </>
@@ -124,16 +116,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-  },
-  auditBadge: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    padding: '2px 8px',
-    borderRadius: '4px',
-    border: '1px solid',
-    cursor: 'default',
-    gap: '0px',
   },
   roleBadge: {
     fontSize: '10px',

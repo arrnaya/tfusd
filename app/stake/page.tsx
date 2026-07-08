@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ethers } from 'ethers';
 import Header from '@/components/Header';
 import ConnectWallet from '@/components/ConnectWallet';
-import { usePublicAuth } from '@/components/PublicAuthContext';
 import { useWallet } from '@/components/WalletContext';
+import WalletGate from '@/components/WalletGate';
 import { useNetwork } from '@/components/NetworkContext';
 import KYCModal from '@/components/KYCModal';
 import { TREASURY_ABI } from '@/lib/treasury-abi';
@@ -30,16 +30,20 @@ interface FixedStake {
 }
 
 export default function StakePage() {
-  const { isAuthenticated, user, email, setEmail, sendOTP, verifyOTP, logout } = usePublicAuth();
   const { signer, address, isConnected, ethersProvider } = useWallet();
-  const { networkConfig } = useNetwork();
+  const { networkConfig, networkKey, setNetwork } = useNetwork();
 
-  const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [simulatedCode, setSimulatedCode] = useState<string | undefined>();
-  const [otpError, setOtpError] = useState<string | null>(null);
+  useEffect(() => {
+    if (networkKey !== 'bsc-mainnet' && networkKey !== 'bsc-testnet') {
+      setNetwork('bsc-testnet');
+    }
+  }, [networkKey, setNetwork]);
 
   const treasuryConfig = useMemo(() => getTreasuryConfig(networkConfig.key as any), [networkConfig.key]);
+  const isTreasuryDeployed = useMemo(
+    () => treasuryConfig.treasuryAddress !== '0x0000000000000000000000000000000000000000',
+    [treasuryConfig.treasuryAddress]
+  );
 
   const [tfusdBalance, setTfusdBalance] = useState<bigint>(0n);
   const [tfusdAllowance, setTfusdAllowance] = useState<bigint>(0n);
@@ -164,23 +168,6 @@ export default function StakePage() {
     return `${Math.round(days)}d`;
   }
 
-  const handleSendOTP = async () => {
-    setOtpError(null);
-    const res = await sendOTP();
-    if (res.success) {
-      setOtpSent(true);
-      setSimulatedCode(res.simulatedCode);
-    } else {
-      setOtpError(res.error || 'Failed to send OTP');
-    }
-  };
-
-  const handleVerifyOTP = () => {
-    setOtpError(null);
-    const res = verifyOTP(otp);
-    if (!res.success) setOtpError(res.error || 'Invalid OTP');
-  };
-
   const ensureKYC = (amount: bigint, currentStake: bigint, action: () => Promise<void>): boolean => {
     if (kycThreshold === 0n) return true;
     if (amount + currentStake > kycThreshold && !isKYCPassed) {
@@ -299,57 +286,10 @@ export default function StakePage() {
     }
   };
 
-  if (!isAuthenticated) {
-    return (
+  return (
+    <WalletGate>
       <div style={page}>
         <Header />
-        <main style={container}>
-          <div style={card}>
-            <h1 style={heading}>Stake TFUSD</h1>
-            <p style={sub}>Enter your email to receive a one-time passcode.</p>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              style={input}
-              disabled={otpSent}
-            />
-            {!otpSent ? (
-              <button onClick={handleSendOTP} style={primaryBtn}>
-                Send OTP
-              </button>
-            ) : (
-              <>
-                <input
-                  type="text"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  placeholder="123456"
-                  style={input}
-                  maxLength={6}
-                />
-                {simulatedCode && (
-                  <div style={demoCode}>Demo code: <strong>{simulatedCode}</strong></div>
-                )}
-                <button onClick={handleVerifyOTP} style={primaryBtn}>
-                  Verify & Continue
-                </button>
-                <button onClick={() => setOtpSent(false)} style={ghostBtn}>
-                  Use another email
-                </button>
-              </>
-            )}
-            {otpError && <div style={error}>{otpError}</div>}
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  return (
-    <div style={page}>
-      <Header />
       <main style={container}>
         <div style={card}>
           <div style={headerRow}>
@@ -358,11 +298,8 @@ export default function StakePage() {
           </div>
           <p style={sub}>Earn rewards by staking your TFUSD.</p>
 
-          {user && (
-            <div style={infoRow}>
-              <span style={muted}>Logged in as {user.email}</span>
-              <button onClick={logout} style={smallBtn}>Logout</button>
-            </div>
+          {isConnected && !isTreasuryDeployed && (
+            <div style={warning}>Treasury is not deployed on {networkConfig.name}. Switch to BSC Testnet.</div>
           )}
 
           <div style={balances}>
@@ -399,7 +336,7 @@ export default function StakePage() {
             />
             <button
               onClick={handleStakeFlexible}
-              disabled={loading || !isConnected || parsedFlexAmount === 0n}
+              disabled={loading || !isConnected || parsedFlexAmount === 0n || !isTreasuryDeployed}
               style={{ ...primaryBtn, opacity: loading || !isConnected || parsedFlexAmount === 0n ? 0.6 : 1 }}
             >
               {loading ? 'Processing...' : flexNeedsApprove ? 'Approve & Stake' : 'Stake Flexible'}
@@ -440,7 +377,7 @@ export default function StakePage() {
             />
             <button
               onClick={handleStakeFixed}
-              disabled={loading || !isConnected || parsedFixedAmount === 0n || selectedPoolId === null}
+              disabled={loading || !isConnected || parsedFixedAmount === 0n || selectedPoolId === null || !isTreasuryDeployed}
               style={{ ...primaryBtn, opacity: loading || !isConnected || parsedFixedAmount === 0n || selectedPoolId === null ? 0.6 : 1 }}
             >
               {loading ? 'Processing...' : fixedNeedsApprove ? 'Approve & Stake' : 'Stake Fixed'}
@@ -508,7 +445,8 @@ export default function StakePage() {
           }}
         />
       )}
-    </div>
+      </div>
+    </WalletGate>
   );
 }
 

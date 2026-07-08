@@ -7,7 +7,6 @@ import { WalletProvider } from './WalletContext';
 import { MyUSDProvider } from './MyUSDContext';
 import { DAOProvider } from './DAOContext';
 import { AuditProvider } from './AuditContext';
-import { PublicAuthProvider } from './PublicAuthContext';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -15,13 +14,11 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       <AdminProvider>
         <NetworkProvider>
           <WalletProvider>
-            <PublicAuthProvider>
-              <MyUSDProvider>
-                <DAOProvider>
-                  <AuditProvider>{children}</AuditProvider>
-                </DAOProvider>
-              </MyUSDProvider>
-            </PublicAuthProvider>
+            <MyUSDProvider>
+              <DAOProvider>
+                <AuditProvider>{children}</AuditProvider>
+              </DAOProvider>
+            </MyUSDProvider>
           </WalletProvider>
         </NetworkProvider>
       </AdminProvider>

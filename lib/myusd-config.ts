@@ -68,11 +68,17 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
     nameToken: 'Treuhand Finanzgruppe USD',
     contractAddress: TFUSD_CONTRACT_ADDRESS,
     daoAddress: DAO_CONTRACT_ADDRESS,
-    poolAddress: env('NEXT_PUBLIC_POOL_CONTRACT_MAINNET', '0x0000000000000000000000000000000000000000'),
+    poolAddress: env(
+      'NEXT_PUBLIC_POOL_CONTRACT_BSC_MAINNET',
+      '0x92e6f8a2a99a86c44d44461693231d091084c7b1ec4f2372c352893caeb4aa84'
+    ),
     poolTargetBalance: '1000000000',
-    geckoNetwork: env('NEXT_PUBLIC_GECKO_NETWORK_MAINNET', 'bsc'),
-    geckoPoolAddress: env('NEXT_PUBLIC_GECKO_POOL_MAINNET', ''),
-    geckoTokenAddress: env('NEXT_PUBLIC_GECKO_TOKEN_MAINNET', ''),
+    geckoNetwork: env('NEXT_PUBLIC_GECKO_NETWORK_BSC_MAINNET', 'bsc'),
+    geckoPoolAddress: env(
+      'NEXT_PUBLIC_GECKO_POOL_BSC_MAINNET',
+      '0x92e6f8a2a99a86c44d44461693231d091084c7b1ec4f2372c352893caeb4aa84'
+    ),
+    geckoTokenAddress: env('NEXT_PUBLIC_GECKO_TOKEN_BSC_MAINNET', TFUSD_CONTRACT_ADDRESS),
     pricePollInterval: 30000,
     isTestnet: false,
   },
@@ -122,7 +128,7 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
 };
 
 export const NETWORK_KEYS: NetworkKey[] = Object.keys(NETWORKS) as NetworkKey[];
-export const DEFAULT_NETWORK_KEY: NetworkKey = 'bsc-mainnet';
+export const DEFAULT_NETWORK_KEY: NetworkKey = 'bsc-testnet';
 
 export function getNetworkConfig(key: NetworkKey): NetworkConfig {
   return NETWORKS[key] ?? NETWORKS[DEFAULT_NETWORK_KEY];
@@ -130,7 +136,7 @@ export function getNetworkConfig(key: NetworkKey): NetworkConfig {
 
 // Backward-compatible default config (BSC Testnet) for code that has not yet
 // been migrated to the NetworkContext.
-export const TFUSD_CONFIG = NETWORKS[DEFAULT_NETWORK_KEY];
+export const TFUSD_CONFIG = NETWORKS['bsc-testnet'];
 export const MYUSD_CONFIG = TFUSD_CONFIG;
 
 // Default DAO governance parameters

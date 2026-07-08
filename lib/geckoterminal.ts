@@ -39,7 +39,30 @@ export interface GeckoPoolInfo {
         };
       };
     };
+    relationships: {
+      base_token: {
+        data: {
+          id: string;
+          type: string;
+        };
+      };
+      quote_token: {
+        data: {
+          id: string;
+          type: string;
+        };
+      };
+    };
   };
+  included?: {
+    id: string;
+    type: string;
+    attributes: {
+      address: string;
+      symbol?: string;
+      name?: string;
+    };
+  }[];
 }
 
 export interface GeckoOHLCV {
@@ -59,6 +82,12 @@ export interface MarketData {
   fdv: number;
   volume24h: number;
   reserveUsd: number;
+  reserveToken0: number | null;
+  reserveToken1: number | null;
+  token0Address: string | null;
+  token1Address: string | null;
+  token0Symbol: string | null;
+  token1Symbol: string | null;
   buys24h: number;
   sells24h: number;
   timestamp: string;
@@ -100,13 +129,34 @@ export async function fetchPoolInfo(network: string, poolAddress: string): Promi
     const attrs = json.data?.attributes;
     if (!attrs) return null;
 
+    const basePrice = parseFloat(attrs.base_token_price_usd) || 0;
+    const quotePrice = parseFloat(attrs.quote_token_price_usd) || 0;
+    const reserveUsd = parseFloat(attrs.reserve_in_usd) || 0;
+
+    // Approximate reserves from USD reserves assuming 50/50 USD split.
+    const reserveToken0 = basePrice > 0 ? reserveUsd / 2 / basePrice : null;
+    const reserveToken1 = quotePrice > 0 ? reserveUsd / 2 / quotePrice : null;
+
+    // Token addresses/symbols from included relationship data.
+    const included = json.included || [];
+    const baseTokenId = json.data?.relationships?.base_token?.data?.id;
+    const quoteTokenId = json.data?.relationships?.quote_token?.data?.id;
+    const baseToken = included.find((t) => t.id === baseTokenId);
+    const quoteToken = included.find((t) => t.id === quoteTokenId);
+
     return {
-      price: parseFloat(attrs.base_token_price_usd) || 0,
+      price: basePrice,
       priceChange24h: parseFloat(attrs.price_change_percentage?.h24) || 0,
       marketCap: attrs.market_cap_usd ? parseFloat(attrs.market_cap_usd) : null,
       fdv: parseFloat(attrs.fdv_usd) || 0,
       volume24h: parseFloat(attrs.volume_usd?.h24) || 0,
-      reserveUsd: parseFloat(attrs.reserve_in_usd) || 0,
+      reserveUsd,
+      reserveToken0,
+      reserveToken1,
+      token0Address: baseToken?.attributes?.address ?? null,
+      token1Address: quoteToken?.attributes?.address ?? null,
+      token0Symbol: baseToken?.attributes?.symbol ?? null,
+      token1Symbol: quoteToken?.attributes?.symbol ?? null,
       buys24h: attrs.transactions?.h24?.buys || 0,
       sells24h: attrs.transactions?.h24?.sells || 0,
       timestamp: new Date().toISOString(),
@@ -120,10 +170,11 @@ export async function fetchPoolOHLCV(
   network: string,
   poolAddress: string,
   timeframe: 'minute' | 'hour' | 'day' = 'hour',
-  aggregate: number = 1
+  aggregate: number = 1,
+  limit: number = 100
 ): Promise<PricePoint[] | null> {
   try {
-    const url = `${GECKO_BASE}/networks/${network}/pools/${poolAddress}/ohlcv/${timeframe}?aggregate=${aggregate}&limit=100`;
+    const url = `${GECKO_BASE}/networks/${network}/pools/${poolAddress}/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${limit}`;
     const res = await fetch(url, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(10000),
@@ -143,6 +194,29 @@ export async function fetchPoolOHLCV(
     }));
   } catch {
     return null;
+  }
+}
+
+export type PriceTimeframe = '24h' | '7d' | '1m' | '1y' | 'max';
+
+export async function fetchPoolPriceHistory(
+  network: string,
+  poolAddress: string,
+  timeframe: PriceTimeframe
+): Promise<PricePoint[] | null> {
+  switch (timeframe) {
+    case '24h':
+      return fetchPoolOHLCV(network, poolAddress, 'hour', 1, 24);
+    case '7d':
+      return fetchPoolOHLCV(network, poolAddress, 'hour', 1, 168);
+    case '1m':
+      return fetchPoolOHLCV(network, poolAddress, 'day', 1, 30);
+    case '1y':
+      return fetchPoolOHLCV(network, poolAddress, 'day', 1, 365);
+    case 'max':
+      return fetchPoolOHLCV(network, poolAddress, 'day', 1, 1000);
+    default:
+      return fetchPoolOHLCV(network, poolAddress, 'hour', 1, 24);
   }
 }
 
@@ -170,6 +244,12 @@ export function getDemoMarketData(): MarketData {
     fdv: 1000000000,
     volume24h: 5000000 + Math.random() * 5000000,
     reserveUsd: 80000000 + Math.random() * 20000000,
+    reserveToken0: 40000000 + Math.random() * 10000000,
+    reserveToken1: 40000000 + Math.random() * 10000000,
+    token0Address: null,
+    token1Address: null,
+    token0Symbol: 'TFUSD',
+    token1Symbol: 'USDC',
     buys24h: Math.floor(Math.random() * 500),
     sells24h: Math.floor(Math.random() * 500),
     timestamp: new Date().toISOString(),

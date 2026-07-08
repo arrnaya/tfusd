@@ -1,11 +1,16 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { useNetwork } from './NetworkContext';
 import { NETWORK_KEYS, NETWORKS, type NetworkKey } from '@/lib/myusd-config';
 
+const BSC_ONLY_PATHS = ['/mint', '/stake'];
+
 export default function NetworkSwitcher() {
+  const pathname = usePathname();
   const { networkKey, networkConfig, setNetwork, isDeployed } = useNetwork();
+  const bscOnly = BSC_ONLY_PATHS.some((p) => pathname?.startsWith(p));
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -89,14 +94,15 @@ export default function NetworkSwitcher() {
             boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
           }}
         >
-          {/* Combined option */}
-          <button
-            onClick={() => {
-              setNetwork('combined');
-              setOpen(false);
-            }}
-            style={itemBtnStyle(networkKey === 'combined')}
-          >
+          {/* Combined option — hidden on Mint/Stake because those pages only support BSC */}
+          {!bscOnly && (
+            <button
+              onClick={() => {
+                setNetwork('combined');
+                setOpen(false);
+              }}
+              style={itemBtnStyle(networkKey === 'combined')}
+            >
             <span
               style={{
                 width: '8px',
@@ -112,10 +118,11 @@ export default function NetworkSwitcher() {
                 All mainnet chains
               </div>
             </div>
-            {networkKey === 'combined' && <span style={{ color: 'var(--accent-cyan)', fontSize: '12px' }}>✓</span>}
-          </button>
+              {networkKey === 'combined' && <span style={{ color: 'var(--accent-cyan)', fontSize: '12px' }}>✓</span>}
+            </button>
+          )}
 
-          {NETWORK_KEYS.map((key) => {
+          {NETWORK_KEYS.filter((key) => !bscOnly || key === 'bsc-mainnet' || key === 'bsc-testnet').map((key) => {
             const net = NETWORKS[key];
             const active = key === networkKey;
             const deployed = net.contractAddress !== '0x0000000000000000000000000000000000000000';

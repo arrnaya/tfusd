@@ -4,9 +4,9 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { ethers } from 'ethers';
 import { useNetwork } from './NetworkContext';
 import { type NetworkConfig, type NetworkKey } from '@/lib/myusd-config';
-import { fetchCrossChainTotalSupply } from '@/lib/cross-chain-supply';
+import { fetchCrossChainTotalSupply, fetchCrossChainMintedBurned } from '@/lib/cross-chain-supply';
 import { TFUSD_ABI } from '@/lib/contract-abi';
-import { fetchPoolInfo, fetchPoolOHLCV, getDemoMarketData, getDemoOHLCV, type MarketData, type PricePoint } from '@/lib/geckoterminal';
+import { fetchPoolInfo, fetchPoolPriceHistory, getDemoMarketData, getDemoOHLCV, type MarketData, type PricePoint, type PriceTimeframe } from '@/lib/geckoterminal';
 import { formatNumber, formatPercentage, clamp } from '@/lib/format-utils';
 import { addAuditEntry } from '@/lib/dao-config';
 import { loadAdminState } from '@/lib/admin-config';
@@ -53,6 +53,7 @@ export interface MyUSDState {
   pegStatus: 'stable' | 'depeg' | 'positive-depeg' | 'critical';
   lastDepegAt: string | null;
   priceHistory: PricePoint[];
+  priceTimeframe: PriceTimeframe;
   priceChange24h: number;
 
   // Market
@@ -67,6 +68,7 @@ export interface MyUSDState {
   // Supply
   totalSupply: string;
   circulatingSupply: string;
+  mintedSupply: string;
   burnedSupply: string;
   mintedToday: string;
   burnedToday: string;
@@ -117,6 +119,7 @@ export interface MyUSDContextType {
   emergencyPause: (operator: string) => void;
   emergencyUnpause: (operator: string) => void;
   refreshData: () => void;
+  setPriceTimeframe: (timeframe: PriceTimeframe) => void;
 }
 
 const MyUSDContext = createContext<MyUSDContextType | undefined>(undefined);
@@ -197,6 +200,7 @@ function getDefaultState(networkConfig: NetworkConfig): MyUSDState {
     pegStatus: 'stable',
     lastDepegAt: null,
     priceHistory: [],
+    priceTimeframe: '24h',
     priceChange24h: 0,
 
     marketData: null,
@@ -207,9 +211,10 @@ function getDefaultState(networkConfig: NetworkConfig): MyUSDState {
     buys24h: 0,
     sells24h: 0,
 
-    totalSupply: '1000000000',
-    circulatingSupply: '850000000',
-    burnedSupply: '150000000',
+    totalSupply: '0',
+    circulatingSupply: '0',
+    mintedSupply: '0',
+    burnedSupply: '0',
     mintedToday: '0',
     burnedToday: '0',
     crossChainSupply: {},
@@ -305,6 +310,10 @@ export function MyUSDProvider({ children }: { children: React.ReactNode }) {
       saveAlerts(alerts);
       return { ...prev, alerts, unacknowledgedCriticalCount: 0 };
     });
+  }, []);
+
+  const setPriceTimeframe = useCallback((timeframe: PriceTimeframe) => {
+    setState((prev) => ({ ...prev, priceTimeframe: timeframe }));
   }, []);
 
   const addMintEvent = useCallback((event: MintBurnEvent) => {
@@ -486,7 +495,7 @@ export function MyUSDProvider({ children }: { children: React.ReactNode }) {
       // Try GeckoTerminal first
       if (networkConfig.geckoPoolAddress && networkConfig.geckoNetwork) {
         marketData = await fetchPoolInfo(networkConfig.geckoNetwork, networkConfig.geckoPoolAddress);
-        priceHistory = await fetchPoolOHLCV(networkConfig.geckoNetwork, networkConfig.geckoPoolAddress, 'hour', 1) || [];
+        priceHistory = await fetchPoolPriceHistory(networkConfig.geckoNetwork, networkConfig.geckoPoolAddress, state.priceTimeframe) || [];
       }
 
       // Fallback to demo data if API unavailable
@@ -508,13 +517,38 @@ export function MyUSDProvider({ children }: { children: React.ReactNode }) {
       // Aggregate total supply across all deployed chains. Market data still
       // comes from GeckoTerminal once pools are listed.
       const crossChainSupply = await fetchCrossChainTotalSupply(networkConfig.contractAddress);
+      const crossChainMintedBurned = await fetchCrossChainMintedBurned(networkConfig.contractAddress);
 
       setState((prev) => {
-        const fallbackDrift = (Math.random() - 0.5) * 1000000;
         const totalSupply = crossChainSupply
           ? crossChainSupply.totalSupply
-          : (parseFloat(prev.totalSupply) + fallbackDrift).toFixed(0);
-        const circSupply = (parseFloat(totalSupply) * 0.85).toFixed(0);
+          : prev.totalSupply;
+
+        let mintedSupply: string;
+        let burnedSupply: string;
+        let circSupply: string;
+        if (crossChainMintedBurned) {
+          mintedSupply = crossChainMintedBurned.minted;
+          burnedSupply = crossChainMintedBurned.burned;
+          circSupply = (parseFloat(mintedSupply) - parseFloat(burnedSupply)).toFixed(0);
+          // Sanity check: minted should never be less than circulating. If the
+          // log scan missed data, fall back to totalSupply.
+          if (parseFloat(mintedSupply) < parseFloat(totalSupply)) {
+            mintedSupply = totalSupply;
+            burnedSupply = '0';
+            circSupply = totalSupply;
+          }
+        } else {
+          // Event scan failed; fall back to totalSupply as circulating and assume no burns.
+          mintedSupply = totalSupply;
+          burnedSupply = '0';
+          circSupply = totalSupply;
+        }
+
+        const marketCap =
+          marketData.marketCap != null
+            ? marketData.marketCap
+            : price * parseFloat(totalSupply);
 
         return {
           ...prev,
@@ -527,7 +561,7 @@ export function MyUSDProvider({ children }: { children: React.ReactNode }) {
           priceHistory,
           priceChange24h: marketData.priceChange24h || 0,
           marketData,
-          marketCap: marketData.marketCap,
+          marketCap,
           fdv: marketData.fdv,
           volume24h: marketData.volume24h,
           reserveUsd: marketData.reserveUsd,
@@ -535,6 +569,8 @@ export function MyUSDProvider({ children }: { children: React.ReactNode }) {
           sells24h: marketData.sells24h,
           totalSupply,
           circulatingSupply: circSupply,
+          mintedSupply,
+          burnedSupply,
           crossChainSupply: crossChainSupply?.perNetwork ?? prev.crossChainSupply,
           crossChainSupplyRaw: crossChainSupply?.perNetworkRaw ?? prev.crossChainSupplyRaw,
           pool: {
@@ -558,7 +594,7 @@ export function MyUSDProvider({ children }: { children: React.ReactNode }) {
         error: e?.message || 'Failed to refresh market data',
       }));
     }
-  }, [state.pegStatus, checkAndAutoActions, networkConfig]);
+  }, [state.pegStatus, checkAndAutoActions, networkConfig, state.priceTimeframe]);
 
   // Cross-component sync check
   function canExecuteMintBurn(): { allowed: boolean; reason: string | null } {
@@ -847,7 +883,7 @@ export function MyUSDProvider({ children }: { children: React.ReactNode }) {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [refreshData, networkConfig.pricePollInterval, networkConfig.key]);
+  }, [refreshData, networkConfig.pricePollInterval, networkConfig.key, state.priceTimeframe]);
 
   // DON sync polling: disable minting if any DON offline
   useEffect(() => {
@@ -902,6 +938,7 @@ export function MyUSDProvider({ children }: { children: React.ReactNode }) {
         emergencyPause,
         emergencyUnpause,
         refreshData,
+        setPriceTimeframe,
       }}
     >
       {children}

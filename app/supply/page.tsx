@@ -7,17 +7,17 @@ import { useMyUSD } from '@/components/MyUSDContext';
 import Header from '@/components/Header';
 import ConnectWallet from '@/components/ConnectWallet';
 import NetworkSwitcher from '@/components/NetworkSwitcher';
+import PriceChart from '@/components/PriceChart';
 import { useNetwork } from '@/components/NetworkContext';
+import { useAudit } from '@/components/AuditContext';
 import { NETWORKS, NETWORK_KEYS, type NetworkKey } from '@/lib/myusd-config';
-import { ethers } from 'ethers';
-import { formatUSD, formatNumber, formatCompact, formatPercentage, formatTimeAgo, truncateAddress } from '@/lib/format-utils';
-import { sparklinePath, sparklineAreaPath, getMinMax, scaleLinear } from '@/lib/chart-utils';
+import { formatUSD, formatNumber, formatCompact, formatTimeAgo, truncateAddress } from '@/lib/format-utils';
 import { fetchLiveReserves, type LiveReserveData } from '@/lib/reserves';
 
 export default function SupplyPage() {
   const router = useRouter();
   const { isAuthenticated, user, isMinter, isGuardian, isAdmin } = useAuth();
-  const { state, acknowledgeAlert, acknowledgeAllAlerts, manualMint, manualBurn, replenishPool, emergencyPause, emergencyUnpause, refreshData } = useMyUSD();
+  const { state, acknowledgeAlert, acknowledgeAllAlerts, manualMint, manualBurn, replenishPool, emergencyPause, emergencyUnpause, refreshData, setPriceTimeframe } = useMyUSD();
   const { networkKey, networkConfig, isDeployed } = useNetwork();
   const [blacklistAddr, setBlacklistAddr] = useState('');
   const [freezeAddr, setFreezeAddr] = useState('');
@@ -39,28 +39,10 @@ export default function SupplyPage() {
   const [reserves, setReserves] = useState<LiveReserveData>({ euroAmount: 0, maalAmount: 0, eurcUsd: 0, maalUsd: 0, totalUsd: 0, loading: true, error: null, lastUpdated: null });
 
   const isCombinedSupply = networkKey === 'combined';
-  const { scopeTotalSupply, scopeCirculatingSupply, scopeAvailable } = useMemo(() => {
-    const raw = state.crossChainSupplyRaw;
-    if (!raw || Object.keys(raw).length === 0) {
-      return { scopeTotalSupply: null, scopeCirculatingSupply: null, scopeAvailable: false };
-    }
-    const keys = isCombinedSupply ? NETWORK_KEYS : [networkKey];
-    let totalRaw = BigInt(0);
-    let any = false;
-    for (const k of keys) {
-      const value = raw[k as NetworkKey];
-      if (value !== undefined) {
-        totalRaw += value;
-        any = true;
-      }
-    }
-    if (!any) {
-      return { scopeTotalSupply: null, scopeCirculatingSupply: null, scopeAvailable: false };
-    }
-    const total = ethers.formatUnits(totalRaw, 18);
-    const circ = (parseFloat(total) * 0.85).toFixed(0);
-    return { scopeTotalSupply: total, scopeCirculatingSupply: circ, scopeAvailable: true };
-  }, [state.crossChainSupplyRaw, networkKey, isCombinedSupply]);
+  // Circulating/minted/burned supplies are fetched cross-chain in MyUSDContext.
+  // For the dashboard we display the global aggregates stored in state.
+  const scopeCirculatingSupply = state.circulatingSupply || null;
+  const scopeAvailable = scopeCirculatingSupply !== null && parseFloat(scopeCirculatingSupply) > 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -113,11 +95,8 @@ export default function SupplyPage() {
     setReplenishAmount('');
   };
 
-  const priceData = state.priceHistory.map(p => p.close);
-  const sparklineData = priceData.length > 1 ? sparklinePath(priceData, 700, 120) : '';
-  const sparklineArea = priceData.length > 1 ? sparklineAreaPath(priceData, 700, 120) : '';
-  const isUp = (state.priceChange24h ?? 0) >= 0;
-  const sparkColor = isUp ? '#00ff88' : '#ef4444';
+  const { result: auditResult } = useAudit();
+  const auditScoreColor = auditResult.overallScore >= 80 ? '#00ff88' : auditResult.overallScore >= 50 ? '#fbbf24' : '#ef4444';
 
   const alertColors = { info: '#00d4ff', warning: '#fbbf24', critical: '#ef4444' };
   const alertBg = { info: 'rgba(0,212,255,0.05)', warning: 'rgba(245,158,11,0.05)', critical: 'rgba(239,68,68,0.05)' };
@@ -156,8 +135,9 @@ export default function SupplyPage() {
             <NetworkSwitcher />
             <ConnectWallet />
           </div>
-          <div style={{ padding: '4px 10px', borderRadius: '6px', background: isUp ? 'rgba(0,255,136,0.1)' : 'rgba(239,68,68,0.1)', color: isUp ? '#00ff88' : '#ef4444', fontSize: '13px', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>
-            {formatPercentage(state.priceChange24h)}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2px 8px', borderRadius: '4px', border: `1px solid ${auditScoreColor}`, cursor: 'default', gap: '0px' }}>
+            <span style={{ fontSize: '10px', fontWeight: 800, color: auditScoreColor, fontFamily: "'JetBrains Mono', monospace" }}>{auditResult.grade}</span>
+            <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace" }}>{auditResult.overallScore}</span>
           </div>
           <div style={{ display: 'flex', gap: '24px' }}>
             <div style={{ textAlign: 'right' }}>
@@ -204,12 +184,12 @@ export default function SupplyPage() {
           <>
             {/* Collateralization Status Banner -- supply scope follows the top network dropdown (Combined = all mainnets) */}
             {(() => {
-              const hasSupply = !!scopeTotalSupply && parseFloat(scopeTotalSupply) > 0;
-              const mintedSupply = scopeTotalSupply ? parseFloat(scopeTotalSupply) || 0 : 0;
+              const hasSupply = !!scopeCirculatingSupply && parseFloat(scopeCirculatingSupply) > 0;
+              const circulatingSupply = scopeCirculatingSupply ? parseFloat(scopeCirculatingSupply) || 0 : 0;
               const reserveUsd = reserves.totalUsd;
-              const ratio = hasSupply ? (reserveUsd / mintedSupply) * 100 : Infinity;
-              const isOver = !hasSupply || reserveUsd >= mintedSupply;
-              const diff = reserveUsd - mintedSupply;
+              const ratio = hasSupply ? (reserveUsd / circulatingSupply) * 100 : Infinity;
+              const isOver = !hasSupply || reserveUsd >= circulatingSupply;
+              const diff = reserveUsd - circulatingSupply;
               const statusColor = isOver ? '#00ff88' : '#ef4444';
               const statusBg = isOver ? 'rgba(0,255,136,0.08)' : 'rgba(239,68,68,0.08)';
               const statusBorder = isOver ? 'rgba(0,255,136,0.35)' : 'rgba(239,68,68,0.35)';
@@ -232,8 +212,8 @@ export default function SupplyPage() {
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginTop: '20px' }}>
                     <div style={{ padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)' }}>
-                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace" }}>Minted Supply</div>
-                      <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: "'JetBrains Mono', monospace" }}>{scopeTotalSupply ? `${formatCompact(scopeTotalSupply)} TFUSD` : '---'}</div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace" }}>Circulating Supply</div>
+                      <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: "'JetBrains Mono', monospace" }}>{scopeCirculatingSupply ? `${formatCompact(scopeCirculatingSupply)} TFUSD` : '---'}</div>
                     </div>
                     <div style={{ padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)' }}>
                       <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace" }}>Total Reserves (USD)</div>
@@ -277,35 +257,38 @@ export default function SupplyPage() {
                   <span style={{ fontSize: '11px', fontWeight: 700, color: pegColor, fontFamily: "'JetBrains Mono', monospace" }}>{pegLabel}</span>
                 </div>
                 <div style={{ fontSize: '14px', color: 'var(--text-secondary)', fontFamily: "'JetBrains Mono', monospace", marginTop: '6px' }}>{formatUSD(state.currentPrice, 6)}</div>
+                <a
+                  href="https://www.geckoterminal.com/bsc/pools/0x92e6f8a2a99a86c44d44461693231d091084c7b1ec4f2372c352893caeb4aa84"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '14px', textDecoration: 'none', fontFamily: "'JetBrains Mono', monospace" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent-cyan)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
+                >
+                  Source: Gecko Terminal
+                </a>
               </div>
             </div>
 
-            {/* Price Sparkline */}
-            <div style={{ ...cardStyle, gridColumn: 'span 3' }}>
-              <div style={cardHeaderStyle}><div style={cardTitleStyle}>Price History</div><span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace" }}>24H</span></div>
-              <div style={{ padding: '20px' }}>
-                {priceData.length > 1 ? (
-                  <svg width="100%" height="140" viewBox="0 0 700 140" preserveAspectRatio="none">
-                    <defs><linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={sparkColor} stopOpacity={0.2} /><stop offset="100%" stopColor={sparkColor} stopOpacity={0} /></linearGradient></defs>
-                    <path d={sparklineArea} fill="url(#areaGrad)" />
-                    <path d={sparklineData} fill="none" stroke={sparkColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    <text x="690" y="14" textAnchor="end" fill={sparkColor} fontSize="11" fontFamily="'JetBrains Mono', monospace" fontWeight={700}>{formatPercentage(state.priceChange24h)}</text>
-                  </svg>
-                ) : <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>No price data</div>}
-              </div>
-            </div>
+            {/* Price Chart */}
+            <PriceChart
+              data={state.priceHistory}
+              timeframe={state.priceTimeframe}
+              onTimeframeChange={setPriceTimeframe}
+              loading={state.loading}
+            />
 
             {/* Supply Cards */}
             <div style={cardStyle}>
-              <div style={cardHeaderStyle}><div style={cardTitleStyle}>Total Supply{networkKey === 'combined' ? ' (Combined)' : ` (${NETWORKS[networkKey].shortName})`}</div></div>
+              <div style={cardHeaderStyle}><div style={cardTitleStyle}>Max Supply</div></div>
               <div style={{ padding: '20px' }}>
-                <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--accent-cyan)', fontFamily: "'JetBrains Mono', monospace" }}>{scopeTotalSupply ? formatCompact(scopeTotalSupply) : '---'}</div>
+                <div style={{ fontSize: '28px', fontWeight: 800, color: '#a855f7', fontFamily: "'JetBrains Mono', monospace" }}>{formatCompact('500000000')}</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>TFUSD</div>
               </div>
             </div>
 
             <div style={cardStyle}>
-              <div style={cardHeaderStyle}><div style={cardTitleStyle}>Circulating</div></div>
+              <div style={cardHeaderStyle}><div style={cardTitleStyle}>Circulating Supply</div></div>
               <div style={{ padding: '20px' }}>
                 <div style={{ fontSize: '28px', fontWeight: 800, color: '#00ff88', fontFamily: "'JetBrains Mono', monospace" }}>{scopeCirculatingSupply ? formatCompact(scopeCirculatingSupply) : '---'}</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>TFUSD</div>
@@ -313,7 +296,15 @@ export default function SupplyPage() {
             </div>
 
             <div style={cardStyle}>
-              <div style={cardHeaderStyle}><div style={cardTitleStyle}>Burned</div></div>
+              <div style={cardHeaderStyle}><div style={cardTitleStyle}>Minted Supply</div></div>
+              <div style={{ padding: '20px' }}>
+                <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--accent-cyan)', fontFamily: "'JetBrains Mono', monospace" }}>{formatCompact(state.mintedSupply)}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>TFUSD</div>
+              </div>
+            </div>
+
+            <div style={cardStyle}>
+              <div style={cardHeaderStyle}><div style={cardTitleStyle}>Burned Supply</div></div>
               <div style={{ padding: '20px' }}>
                 <div style={{ fontSize: '28px', fontWeight: 800, color: '#ef4444', fontFamily: "'JetBrains Mono', monospace" }}>{formatCompact(state.burnedSupply)}</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>TFUSD</div>
@@ -448,16 +439,43 @@ export default function SupplyPage() {
             <div style={cardStyle}>
               <div style={cardHeaderStyle}><div style={cardTitleStyle}>Pool Status</div></div>
               <div style={{ padding: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: state.pool.health === 'healthy' ? '#00ff88' : state.pool.health === 'low' ? '#fbbf24' : '#ef4444', boxShadow: `0 0 10px ${state.pool.health === 'healthy' ? '#00ff88' : state.pool.health === 'low' ? '#fbbf24' : '#ef4444'}` }} />
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', fontFamily: "'JetBrains Mono', monospace" }}>{state.pool.health}</span>
-                </div>
-                <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: "'JetBrains Mono', monospace" }}>{formatCompact(state.pool.balance)}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Target: {formatCompact(state.pool.target)}</div>
-                <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden', marginTop: '12px' }}>
-                  <div style={{ height: '100%', width: `${Math.min(100, (parseFloat(state.pool.balance) / parseFloat(state.pool.target)) * 100)}%`, background: state.pool.health === 'healthy' ? 'linear-gradient(90deg, #00ff88, #00d4ff)' : state.pool.health === 'low' ? 'linear-gradient(90deg, #fbbf24, #ff9500)' : 'linear-gradient(90deg, #ef4444, #ff3366)', borderRadius: '3px', transition: 'width 0.3s' }} />
-                </div>
-                {state.pool.lastReplenishAt && <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '8px', fontFamily: "'JetBrains Mono', monospace" }}>Last replenish: {formatTimeAgo(state.pool.lastReplenishAt)}</div>}
+                {(() => {
+                  const reserveUsd = state.marketData?.reserveUsd ?? 0;
+                  const reserveToken0 = state.marketData?.reserveToken0 ?? null;
+                  const reserveToken1 = state.marketData?.reserveToken1 ?? null;
+                  // Minimum $10k USD liquidity is considered healthy for this small/new pool.
+                  const poolHealth = reserveUsd >= 10000 ? 'healthy' : reserveUsd > 0 ? 'low' : 'critical';
+                  const healthColor = poolHealth === 'healthy' ? '#00ff88' : poolHealth === 'low' ? '#fbbf24' : '#ef4444';
+                  const token0Symbol = state.marketData?.token0Symbol || 'TFUSD';
+                  const token1Symbol = state.marketData?.token1Symbol || 'USDC';
+                  const targetUsd = 10000;
+                  const poolRatio = targetUsd > 0 ? reserveUsd / targetUsd : 0;
+                  return (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: healthColor, boxShadow: `0 0 10px ${healthColor}` }} />
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', fontFamily: "'JetBrains Mono', monospace" }}>{poolHealth}</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                        <div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace" }}>{token0Symbol} RESERVE</div>
+                          <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: "'JetBrains Mono', monospace" }}>{reserveToken0 != null ? formatCompact(reserveToken0.toString()) : '---'}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace" }}>{token1Symbol} RESERVE</div>
+                          <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: "'JetBrains Mono', monospace" }}>{reserveToken1 != null ? formatCompact(reserveToken1.toString()) : '---'}</div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        <span>Total Liquidity: {formatUSD(reserveUsd, 2)}</span>
+                        <span>Target: {formatUSD(targetUsd, 0)}</span>
+                      </div>
+                      <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden', marginTop: '12px' }}>
+                        <div style={{ height: '100%', width: `${Math.min(100, poolRatio * 100)}%`, background: poolHealth === 'healthy' ? 'linear-gradient(90deg, #00ff88, #00d4ff)' : poolHealth === 'low' ? 'linear-gradient(90deg, #fbbf24, #ff9500)' : 'linear-gradient(90deg, #ef4444, #ff3366)', borderRadius: '3px', transition: 'width 0.3s' }} />
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
 

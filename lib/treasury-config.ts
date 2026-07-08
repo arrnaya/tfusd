@@ -107,7 +107,7 @@ export const ERC20_ABI = [
 ] as const;
 
 export function getTreasuryConfig(networkKey: NetworkKey): TreasuryNetworkConfig {
-  return TREASURY_NETWORKS[networkKey] ?? TREASURY_NETWORKS['bsc-mainnet'];
+  return TREASURY_NETWORKS[networkKey] ?? TREASURY_NETWORKS['bsc-testnet'];
 }
 
 export function formatUnits(value: bigint, decimals: number): string {
