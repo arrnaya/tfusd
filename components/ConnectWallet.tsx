@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useWallet, type EIP6963ProviderDetail } from './WalletContext';
+import StablecoinRatingBadge from './StablecoinRatingBadge';
 import { truncateAddress } from '@/lib/format-utils';
 
 function hasBrowserWallet(): boolean {
@@ -100,6 +101,7 @@ export default function ConnectWallet() {
   if (isConnected && address) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <StablecoinRatingBadge />
         {error && (
           <span style={{ color: '#ef4444', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace" }}>
             {error}
@@ -115,6 +117,7 @@ export default function ConnectWallet() {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', position: 'relative' }}>
+      <StablecoinRatingBadge />
       {error && (
         <span style={{ color: '#ef4444', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace" }}>
           {error}
