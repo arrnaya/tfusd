@@ -5,6 +5,6 @@
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "github": {
-    "enabled": false
+    "enabled": true
   }
 }
