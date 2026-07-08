@@ -58,3 +58,4 @@ test-results
 playwright-report
 *.test.js.snap
 .vercel
+tsconfig.tsbuildinfo

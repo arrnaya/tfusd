@@ -19,8 +19,8 @@ const TIMEFRAMES: { key: PriceTimeframe; label: string }[] = [
 ];
 
 const VIEW_WIDTH = 760;
-const VIEW_HEIGHT = 320;
-const MARGIN = { top: 30, right: 30, bottom: 50, left: 60 };
+const VIEW_HEIGHT = 220;
+const MARGIN = { top: 24, right: 30, bottom: 44, left: 56 };
 const PLOT_WIDTH = VIEW_WIDTH - MARGIN.left - MARGIN.right;
 const PLOT_HEIGHT = VIEW_HEIGHT - MARGIN.top - MARGIN.bottom;
 
@@ -129,7 +129,7 @@ export default function PriceChart({ data, timeframe, onTimeframeChange, loading
       </div>
       <div style={{ padding: '20px', position: 'relative' }}>
         {loading || data.length < 2 ? (
-          <div style={{ height: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '13px', fontFamily: "'JetBrains Mono', monospace" }}>
+          <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '13px', fontFamily: "'JetBrains Mono', monospace" }}>
             {loading ? 'Loading chart data...' : 'No price data'}
           </div>
         ) : (

@@ -8,6 +8,7 @@ import Header from '@/components/Header';
 import ConnectWallet from '@/components/ConnectWallet';
 import NetworkSwitcher from '@/components/NetworkSwitcher';
 import PriceChart from '@/components/PriceChart';
+import Footer from '@/components/Footer';
 import { useNetwork } from '@/components/NetworkContext';
 import { useAudit } from '@/components/AuditContext';
 import { NETWORKS, NETWORK_KEYS, type NetworkKey } from '@/lib/myusd-config';
@@ -313,7 +314,7 @@ export default function SupplyPage() {
 
             {/* Cross-Chain Supply Breakdown */}
             {Object.keys(state.crossChainSupply || {}).length > 0 && (
-              <div style={{ ...cardStyle, gridColumn: 'span 3' }}>
+              <div style={{ ...cardStyle, gridColumn: 'span 2' }}>
                 <div style={cardHeaderStyle}><div style={cardTitleStyle}>Cross-Chain Supply Breakdown</div></div>
                 <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
                   {Object.entries(state.crossChainSupply || {}).map(([key, amount]) => (
@@ -691,6 +692,7 @@ export default function SupplyPage() {
           </div>
         )}
       </main>
+      <Footer />
     </div>
   );
 }

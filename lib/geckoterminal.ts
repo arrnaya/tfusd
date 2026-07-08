@@ -184,14 +184,16 @@ export async function fetchPoolOHLCV(
     const list = json.data?.attributes?.ohlcv_list;
     if (!list || !Array.isArray(list)) return null;
 
-    return list.map(([timestamp, open, high, low, close, volume]) => ({
-      timestamp: timestamp * 1000,
-      open: parseFloat(open) || 0,
-      high: parseFloat(high) || 0,
-      low: parseFloat(low) || 0,
-      close: parseFloat(close) || 0,
-      volume: parseFloat(volume) || 0,
-    }));
+    return list
+      .map(([timestamp, open, high, low, close, volume]) => ({
+        timestamp: timestamp * 1000,
+        open: parseFloat(open) || 0,
+        high: parseFloat(high) || 0,
+        low: parseFloat(low) || 0,
+        close: parseFloat(close) || 0,
+        volume: parseFloat(volume) || 0,
+      }))
+      .sort((a, b) => a.timestamp - b.timestamp);
   } catch {
     return null;
   }

@@ -3,10 +3,10 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import { useNetwork } from './NetworkContext';
-import { type NetworkConfig, type NetworkKey } from '@/lib/myusd-config';
+import { NETWORKS, type NetworkConfig, type NetworkKey } from '@/lib/myusd-config';
 import { fetchCrossChainTotalSupply, fetchCrossChainMintedBurned } from '@/lib/cross-chain-supply';
 import { TFUSD_ABI } from '@/lib/contract-abi';
-import { fetchPoolInfo, fetchPoolPriceHistory, getDemoMarketData, getDemoOHLCV, type MarketData, type PricePoint, type PriceTimeframe } from '@/lib/geckoterminal';
+import { fetchPoolInfo, fetchPoolPriceHistory, getDemoMarketData, type MarketData, type PricePoint, type PriceTimeframe } from '@/lib/geckoterminal';
 import { formatNumber, formatPercentage, clamp } from '@/lib/format-utils';
 import { addAuditEntry } from '@/lib/dao-config';
 import { loadAdminState } from '@/lib/admin-config';
@@ -492,18 +492,24 @@ export function MyUSDProvider({ children }: { children: React.ReactNode }) {
       let marketData: MarketData | null = null;
       let priceHistory: PricePoint[] = [];
 
-      // Try GeckoTerminal first
-      if (networkConfig.geckoPoolAddress && networkConfig.geckoNetwork) {
-        marketData = await fetchPoolInfo(networkConfig.geckoNetwork, networkConfig.geckoPoolAddress);
-        priceHistory = await fetchPoolPriceHistory(networkConfig.geckoNetwork, networkConfig.geckoPoolAddress, state.priceTimeframe) || [];
+      // Try GeckoTerminal for the active network first, then fall back to
+      // BSC mainnet pool data so the chart always shows real TFUSD prices.
+      let geckoNetwork = networkConfig.geckoNetwork;
+      let geckoPoolAddress = networkConfig.geckoPoolAddress;
+      if (!geckoPoolAddress) {
+        const mainnet = NETWORKS['bsc-mainnet'];
+        geckoNetwork = mainnet.geckoNetwork;
+        geckoPoolAddress = mainnet.geckoPoolAddress;
       }
 
-      // Fallback to demo data if API unavailable
+      if (geckoNetwork && geckoPoolAddress) {
+        marketData = await fetchPoolInfo(geckoNetwork, geckoPoolAddress);
+        priceHistory = await fetchPoolPriceHistory(geckoNetwork, geckoPoolAddress, state.priceTimeframe) || [];
+      }
+
+      // Fallback to demo market data only if no real data could be fetched.
       if (!marketData) {
         marketData = getDemoMarketData();
-      }
-      if (priceHistory.length === 0) {
-        priceHistory = getDemoOHLCV(50);
       }
 
       const price = marketData.price || 1.0;
