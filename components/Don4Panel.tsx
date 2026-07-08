@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { useAdmin } from './AdminContext';
 import Modal from './Modal';
 import { maskApiUrl } from '@/lib/url-masker';
+import { fetchMaalBalance, fetchCoinGeckoPrices } from '@/lib/reserves';
 
-const MAAL_RPC = 'https://node1-mainnet-new.maalscan.io';
 const MAAL_WALLET = '0xC57E89Dda471f142eA3bB140eb7E7dd4f81039eC';
 
 const MINT_API_URL = 'https://por-api.infinnity.capital/don-1/mint-icusd';
@@ -18,32 +18,7 @@ function hexToDec(hex: string): number {
   return parseInt(hex, 16);
 }
 
-function weiToMaal(weiHex: string): number {
-  const wei = hexToDec(weiHex);
-  return wei / 1e18;
-}
 
-async function fetchMaalBalance(): Promise<number | null> {
-  try {
-    const response = await fetch(MAAL_RPC, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'eth_getBalance',
-        params: [MAAL_WALLET, 'latest'],
-        id: 1,
-      }),
-    });
-    const data = await response.json();
-    if (data.result) {
-      return weiToMaal(data.result);
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
 
 interface BlackScreenData {
   amount: string | null;
@@ -134,6 +109,8 @@ export default function Don4Panel({ onLog }: { onLog: (source: string, level: st
   const [mintingActive, setMintingActive] = useState(true);
   const [reserves, setReserves] = useState<any>(null);
   const [maalBalance, setMaalBalance] = useState<number | null>(null);
+  const [maalBalanceUsd, setMaalBalanceUsd] = useState<number>(0);
+  const [maalUsd, setMaalUsd] = useState<number>(0);
   const [connStatus, setConnStatus] = useState<'live' | 'demo' | 'error'>('live');
   const [errorDetail, setErrorDetail] = useState<string>('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -221,12 +198,21 @@ export default function Don4Panel({ onLog }: { onLog: (source: string, level: st
       }
 
       let maalBal: number | null = null;
+      let maalPrice = 0;
       if (maalEnabled) {
-        maalBal = await fetchMaalBalance();
+        try {
+          const [balance, prices] = await Promise.all([fetchMaalBalance(), fetchCoinGeckoPrices()]);
+          maalBal = balance;
+          maalPrice = prices['maal-chain']?.usd ?? 0;
+        } catch (e: any) {
+          onLog('DON-4', 'warn', `MAAL data fetch failed: ${e.message}`);
+        }
         if (maalBal === null) {
           onLog('DON-4', 'warn', 'MAAL balance fetch failed — using cached value');
         }
       }
+      setMaalUsd(maalPrice);
+      setMaalBalanceUsd((maalBal ?? 0) * maalPrice);
 
       if (!reservesData && mintErr) {
         setConnStatus('error');
@@ -303,8 +289,9 @@ export default function Don4Panel({ onLog }: { onLog: (source: string, level: st
 
     if (maalEnabled) {
       result.maal_balance = maalBalance;
+      result.maal_balance_usd = maalBalanceUsd;
+      result.maal_price_usd = maalUsd;
       result.maal_wallet = MAAL_WALLET;
-      result.maal_rpc = MAAL_RPC;
     } else {
       result.maal_balance = { disabled: true, note: 'MAAL digital asset fetching disabled by admin' };
     }
@@ -350,11 +337,10 @@ export default function Don4Panel({ onLog }: { onLog: (source: string, level: st
     ...(maalEnabled
       ? [
           {
-            label: 'MAAL Balance',
-            value: maalBalance !== null ? `${maalBalance.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 6 })} MAAL` : '--',
+            label: 'Digital Assets Reserves',
+            value: maalBalanceUsd > 0 ? `$${maalBalanceUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '--',
             highlight: true,
           },
-          { label: 'MAAL Wallet', value: MAAL_WALLET },
         ]
       : []),
   ];
@@ -430,9 +416,35 @@ export default function Don4Panel({ onLog }: { onLog: (source: string, level: st
         {modalLoading ? (
           <div style={{ color: 'var(--text-muted)' }}>Fetching live reserves from {DISPLAY_RESERVES_URL}...</div>
         ) : (
-          <pre style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', overflowX: 'auto' }}>
-            <code dangerouslySetInnerHTML={{ __html: syntaxHighlightJson(modalData) }} />
-          </pre>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {maalEnabled && (
+              <div style={styles.maalPopupSection}>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px' }}>
+                  MAAL Digital Asset Reserves
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div style={styles.maalPopupCard}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>MAAL Balance</div>
+                    <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--accent-green)', wordBreak: 'break-all' }}>
+                      {maalBalance !== null ? `${maalBalance.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 6 })} MAAL` : '--'}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      ${maalBalanceUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div style={styles.maalPopupCard}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>MAAL Wallet</div>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', wordBreak: 'break-all' }}>
+                      {MAAL_WALLET}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <pre style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', overflowX: 'auto', margin: 0 }}>
+              <code dangerouslySetInnerHTML={{ __html: syntaxHighlightJson(modalData) }} />
+            </pre>
+          </div>
         )}
       </Modal>
     </div>
@@ -494,5 +506,17 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     boxShadow: '0 4px 12px rgba(0, 255, 136, 0.25)',
     transition: 'transform 0.15s, box-shadow 0.15s',
+  },
+  maalPopupSection: {
+    background: 'var(--bg-secondary)',
+    border: '1px solid var(--border-color)',
+    borderRadius: '12px',
+    padding: '16px',
+  },
+  maalPopupCard: {
+    background: 'var(--bg-card)',
+    border: '1px solid var(--border-color)',
+    borderRadius: '10px',
+    padding: '12px',
   },
 };
