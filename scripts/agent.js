@@ -1,8 +1,8 @@
 /**
  * =============================================================================
- * TFUSD Agent — Background Monitoring & Audit Process
+ * TFUSD Agent — Background Monitoring, Audit & Transfer Alert Process
  * =============================================================================
- * Connects to the local Hardhat node via ethers.js.
+ * Connects to the configured EVM RPC via ethers.js.
  * Every 30 seconds, checks:
  *   - Contract health (TFUSD + DAO)
  *   - Peg status (mocked price feed or on-chain derived)
@@ -15,6 +15,9 @@
  *   3. Pool Sufficiency      4. DAO Governance Health
  *   5. Minter Allowance      6. Pause Status
  *   7. Blacklist Hygiene     8. DON Connectivity
+ *
+ * Additionally listens for on-chain TFUSD Transfer events and sends Telegram
+ * alerts whenever a transfer exceeds the configured USD threshold.
  *
  * Results are saved to /app/data/audit-results.json and logged to console.
  * =============================================================================
@@ -41,6 +44,15 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const TELEGRAM_ALERT_SEVERITY = process.env.TELEGRAM_ALERT_SEVERITY || 'warning';
 const SEVERITY_RANK = { info: 0, warning: 1, critical: 2 };
 let lastAlertHash = null;
+
+// ── Transfer alerting ────────────────────────────────────────────────────────
+const TRANSFER_ALERT_ENABLED = process.env.TRANSFER_ALERT_ENABLED !== 'false';
+const TRANSFER_USD_THRESHOLD = parseFloat(process.env.TRANSFER_USD_THRESHOLD || '5000');
+const GECKO_NETWORK = process.env.GECKO_NETWORK || 'bsc';
+const GECKO_POOL_ADDRESS =
+  process.env.GECKO_POOL_ADDRESS ||
+  '0x92e6f8a2a99a86c44d44461693231d091084c7b1ec4f2372c352893caeb4aa84';
+const EXPLORER_URL = process.env.EXPLORER_URL;
 
 // Load ABI from local JSON (CommonJS-compatible)
 const TFUSD_ABI = require('./contract-abi.json');
@@ -88,6 +100,11 @@ let daoAddress = process.env.TFUSD_DAO_ADDRESS;
 
 let lastAuditResult = null;
 let consecutiveFailures = 0;
+let tfusdDecimals = 18;
+let chainId = null;
+let explorerBaseUrl = null;
+const lastTransferAlertTxs = new Set();
+let geckoPoolData = null;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function nowIso() {
@@ -114,6 +131,30 @@ function hashAlerts(alerts) {
 function rank(severity) {
   const map = { info: 0, warning: 1, critical: 2 };
   return map[severity] ?? 0;
+}
+
+function getGrade(score) {
+  if (score >= 97) return 'A+';
+  if (score >= 93) return 'A';
+  if (score >= 90) return 'A-';
+  if (score >= 87) return 'B+';
+  if (score >= 83) return 'B';
+  if (score >= 80) return 'B-';
+  if (score >= 77) return 'C+';
+  if (score >= 73) return 'C';
+  if (score >= 70) return 'C-';
+  if (score >= 60) return 'D';
+  return 'F';
+}
+
+function shortenAddress(addr) {
+  if (!addr || addr.length < 10) return addr;
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+
+function formatUSD(num, digits = 2) {
+  if (num == null || Number.isNaN(num)) return '--';
+  return `$${Number(num).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
 }
 
 function sendTelegramMessage(text) {
@@ -160,6 +201,159 @@ function sendTelegramMessage(text) {
   });
 }
 
+async function fetchGeckoPoolData() {
+  try {
+    const url = `https://api.geckoterminal.com/api/v2/networks/${GECKO_NETWORK}/pools/${GECKO_POOL_ADDRESS}`;
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const attrs = json.data?.attributes;
+    if (!attrs) return null;
+
+    const basePrice = parseFloat(attrs.base_token_price_usd) || 0;
+    const quotePrice = parseFloat(attrs.quote_token_price_usd) || 0;
+    const reserveUsd = parseFloat(attrs.reserve_in_usd) || 0;
+
+    const included = json.included || [];
+    const baseTokenId = json.data?.relationships?.base_token?.data?.id;
+    const quoteTokenId = json.data?.relationships?.quote_token?.data?.id;
+    const baseToken = included.find((t) => t.id === baseTokenId);
+    const quoteToken = included.find((t) => t.id === quoteTokenId);
+
+    return {
+      price: basePrice,
+      priceChange24h: parseFloat(attrs.price_change_percentage?.h24) || 0,
+      marketCap: attrs.market_cap_usd ? parseFloat(attrs.market_cap_usd) : null,
+      fdv: parseFloat(attrs.fdv_usd) || 0,
+      volume24h: parseFloat(attrs.volume_usd?.h24) || 0,
+      reserveUsd,
+      reserveToken0: basePrice > 0 ? reserveUsd / 2 / basePrice : null,
+      reserveToken1: quotePrice > 0 ? reserveUsd / 2 / quotePrice : null,
+      token0Symbol: baseToken?.attributes?.symbol || 'TFUSD',
+      token1Symbol: quoteToken?.attributes?.symbol || 'USDC',
+      buys24h: attrs.transactions?.h24?.buys || 0,
+      sells24h: attrs.transactions?.h24?.sells || 0,
+      timestamp: nowIso(),
+    };
+  } catch (err) {
+    logger.warn(`GeckoTerminal pool fetch failed: ${err.message}`);
+    return null;
+  }
+}
+
+async function resolveExplorerUrl() {
+  if (EXPLORER_URL) {
+    explorerBaseUrl = EXPLORER_URL.replace(/\/+$/, '');
+    return;
+  }
+  try {
+    const network = await provider.getNetwork();
+    chainId = Number(network.chainId);
+    const map = {
+      56: 'https://bscscan.com',
+      97: 'https://testnet.bscscan.com',
+      1: 'https://etherscan.io',
+      11155111: 'https://sepolia.etherscan.io',
+    };
+    explorerBaseUrl = map[chainId] || null;
+  } catch (err) {
+    logger.warn(`Could not resolve explorer URL: ${err.message}`);
+    explorerBaseUrl = null;
+  }
+}
+
+async function sendLargeTransferAlert(from, to, value, txHash) {
+  if (!TELEGRAM_ALERT_ENABLED || !TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
+
+  const amount = parseFloat(ethers.formatUnits(value, tfusdDecimals));
+  const amountStr = amount.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  const txUrl = explorerBaseUrl ? `${explorerBaseUrl}/tx/${txHash}` : null;
+
+  const lines = [
+    '💸 *Large TFUSD Transfer*',
+    '',
+    `*Amount:* ${amountStr} TFUSD (~$${amountStr})`,
+    `*From:* \`${from}\` (${shortenAddress(from)})`,
+    `*To:* \`${to}\` (${shortenAddress(to)})`,
+  ];
+  if (txUrl) {
+    lines.push('', `[View Transaction on Explorer](${txUrl})`);
+  }
+
+  try {
+    await sendTelegramMessage(lines.join('\n'));
+    logger.info(`Transfer alert sent for tx ${txHash} (${amountStr} TFUSD)`);
+  } catch (err) {
+    logger.error(`Failed to send transfer alert: ${err.message}`);
+  }
+}
+
+async function scanRecentLargeTransfers(blocksBack = 50) {
+  try {
+    const currentBlock = await provider.getBlockNumber();
+    const fromBlock = Math.max(0, currentBlock - blocksBack);
+    const transferTopic = ethers.id('Transfer(address,address,uint256)');
+    const logs = await provider.getLogs({
+      address: tfusdAddress,
+      topics: [transferTopic],
+      fromBlock,
+      toBlock: currentBlock,
+    });
+    logger.info(`Scanned ${logs.length} Transfer logs from last ${blocksBack} blocks`);
+
+    const iface = new ethers.Interface(['event Transfer(address indexed from, address indexed to, uint256 value)']);
+    for (const log of logs) {
+      const parsed = iface.parseLog({ topics: log.topics, data: log.data });
+      const value = parsed.args.value;
+      const amount = parseFloat(ethers.formatUnits(value, tfusdDecimals));
+      if (amount >= TRANSFER_USD_THRESHOLD && !lastTransferAlertTxs.has(log.transactionHash)) {
+        await sendLargeTransferAlert(parsed.args.from, parsed.args.to, value, log.transactionHash);
+        lastTransferAlertTxs.add(log.transactionHash);
+      }
+    }
+  } catch (err) {
+    logger.error(`Recent transfer scan failed: ${err.message}`);
+  }
+}
+
+async function startTransferMonitoring() {
+  if (!TRANSFER_ALERT_ENABLED) return;
+
+  try {
+    tfusdDecimals = await tfusd.decimals();
+  } catch (err) {
+    logger.warn(`Could not read TFUSD decimals, assuming 18: ${err.message}`);
+  }
+
+  await resolveExplorerUrl();
+
+  const eventAbi = [...TFUSD_ABI, 'event Transfer(address indexed from, address indexed to, uint256 value)'];
+  const tfusdEvents = new ethers.Contract(tfusdAddress, eventAbi, provider);
+
+  tfusdEvents.on('Transfer', async (from, to, value, event) => {
+    const amount = parseFloat(ethers.formatUnits(value, tfusdDecimals));
+    if (amount < TRANSFER_USD_THRESHOLD) return;
+
+    const txHash = event.log.transactionHash;
+    if (lastTransferAlertTxs.has(txHash)) return;
+    lastTransferAlertTxs.add(txHash);
+
+    // Bound the dedup set size
+    if (lastTransferAlertTxs.size > 200) {
+      const first = lastTransferAlertTxs.values().next().value;
+      lastTransferAlertTxs.delete(first);
+    }
+
+    await sendLargeTransferAlert(from, to, value, txHash);
+  });
+
+  logger.info(`Transfer monitoring started (threshold: $${TRANSFER_USD_THRESHOLD})`);
+  await scanRecentLargeTransfers(50);
+}
+
 async function notifyTelegram(result) {
   if (!TELEGRAM_ALERT_ENABLED) return;
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
@@ -175,14 +369,39 @@ async function notifyTelegram(result) {
   if (currentHash === lastAlertHash) return; // deduplicate identical alerts
   lastAlertHash = currentHash;
 
-  const lines = relevant.map((a) => `*[${a.severity.toUpperCase()}]* ${a.message}`);
-  const text = ['🚨 *TFUSD Auditor Alert*', `Score: ${result.overallScore}/100 | Grade: ${result.grade}`, '', ...lines].join('\n');
+  const grade = result.grade || getGrade(result.overallScore);
+  const alertLines = relevant.map((a) => `*[${a.severity.toUpperCase()}]* ${a.message}`);
+
+  const poolLines = [];
+  if (geckoPoolData) {
+    const priceChangeStr = `${geckoPoolData.priceChange24h >= 0 ? '+' : ''}${geckoPoolData.priceChange24h.toFixed(2)}%`;
+    const health = geckoPoolData.reserveUsd >= 10000 ? 'healthy' : geckoPoolData.reserveUsd > 0 ? 'low' : 'critical';
+    poolLines.push(
+      '',
+      '*Pool Status*',
+      `• Price: ${formatUSD(geckoPoolData.price, 4)} (${priceChangeStr})`,
+      `• Liquidity: ${formatUSD(geckoPoolData.reserveUsd, 0)}`,
+      `• ${geckoPoolData.token0Symbol} Reserve: ${geckoPoolData.reserveToken0 != null ? geckoPoolData.reserveToken0.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '--'}`,
+      `• ${geckoPoolData.token1Symbol} Reserve: ${geckoPoolData.reserveToken1 != null ? geckoPoolData.reserveToken1.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '--'}`,
+      `• 24h Volume: ${formatUSD(geckoPoolData.volume24h, 0)}`,
+      `• 24h Trades: ${geckoPoolData.buys24h} buys / ${geckoPoolData.sells24h} sells`,
+      `• Health: ${health}`
+    );
+  }
+
+  const text = [
+    '🚨 *TFUSD Auditor Alert*',
+    `Score: ${result.overallScore}/100 | Grade: ${grade}`,
+    '',
+    ...alertLines,
+    ...poolLines,
+  ].join('\n');
 
   try {
     await sendTelegramMessage(text);
-    logger.info('Telegram alert sent');
+    logger.info('Telegram audit alert sent');
   } catch (err) {
-    logger.error(`Failed to send Telegram alert: ${err.message}`);
+    logger.error(`Failed to send Telegram audit alert: ${err.message}`);
   }
 }
 
@@ -315,7 +534,7 @@ async function checkPegStatus() {
     const totalSupply = await tfusd.totalSupply();
     // Mock: assume target market cap equals total supply (1:1 peg)
     // In production, replace with actual oracle price query
-    const mockPrice = 1.0;
+    const mockPrice = geckoPoolData?.price || 1.0;
     const deviation = Math.abs(mockPrice - 1.0);
     const deviationBps = Math.round(deviation * 10_000);
 
@@ -413,6 +632,9 @@ async function runAuditCycle() {
   try {
     logger.info('Starting audit cycle...');
 
+    // Refresh live market data for richer alerts and peg checks
+    geckoPoolData = await fetchGeckoPoolData();
+
     const tfusdHealth = await checkTFUSDHealth();
     const daoHealth = await checkDAOHealth();
     const pegStatus = await checkPegStatus();
@@ -435,11 +657,13 @@ async function runAuditCycle() {
     };
 
     const score = calculateAuditScore(checks);
+    const grade = getGrade(score.overall);
 
     const result = {
       timestamp,
       cycleDurationMs: Date.now() - cycleStart,
       overallScore: score.overall,
+      grade,
       categoryScores: score.categories,
       checks: {
         tfusd: tfusdHealth,
@@ -484,7 +708,7 @@ async function runAuditCycle() {
     console.log('║  TFUSD Audit Report                                              ║');
     console.log(`║  ${timestamp.padEnd(63)}║`);
     console.log('╠══════════════════════════════════════════════════════════════════╣');
-    console.log(`║  Overall Score: ${String(score.overall).padStart(3)} / 100                                      ║`);
+    console.log(`║  Overall Score: ${String(score.overall).padStart(3)} / 100  |  Grade: ${grade.padEnd(5)}                    ║`);
     console.log('╠══════════════════════════════════════════════════════════════════╣');
     Object.entries(score.categories).forEach(([cat, val]) => {
       const line = `  ${cat}: ${String(val).padStart(3)}`;
@@ -508,6 +732,7 @@ async function runAuditCycle() {
       timestamp,
       cycleDurationMs: Date.now() - cycleStart,
       overallScore: 0,
+      grade: 'F',
       categoryScores: {},
       error: err.message,
       consecutiveFailures,
@@ -556,6 +781,9 @@ async function main() {
   logger.info(`Monitoring TFUSD:  ${tfusdAddress}`);
   logger.info(`Monitoring DAO:    ${daoAddress}`);
   logger.info('──────────────────────────────────────────────────────────────────');
+
+  // Start real-time transfer monitoring (also scans recent history)
+  await startTransferMonitoring();
 
   // Run immediately, then on interval
   await runAuditCycle();
