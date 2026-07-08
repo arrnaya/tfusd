@@ -58,7 +58,7 @@ export default function Footer() {
             GeckoTerminal
           </a>
           <a
-            href="https://bscscan.com/token/0xe05d4c8a972ee90478861f2c87296bb190adb0b8#transactions"
+            href="https://bscscan.com/token/0x1794F2bb542c28c4Cf14872c39C2E31f740dd102"
             target="_blank"
             rel="noopener noreferrer"
             style={{ fontSize: '12px', color: 'var(--text-muted)', textDecoration: 'none', fontFamily: "'JetBrains Mono', monospace" }}
