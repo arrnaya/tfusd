@@ -10,7 +10,7 @@ export default function Header() {
     <header style={styles.header}>
       <div style={styles.headerLeft}>
         <Link href="/" style={styles.logo}>
-          TF
+          <img src="/TFUSD-LOGO.png" alt="TFUSD Logo" style={{ width: '64px', height: '64px' }} />
         </Link>
         <div style={styles.headerTitle}>
           <h1 style={styles.h1}>Treuhand Finanzgruppe USD Decentralized Oracle Network</h1>
